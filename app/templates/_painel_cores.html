@@ -1,0 +1,9 @@
+{% if cores %}
+<style>
+  :root {
+    {% for item, cor in cores.items() %}
+    --painel-{{ item }}: {{ cor }};
+    {% endfor %}
+  }
+</style>
+{% endif %}

@@ -3,7 +3,7 @@ import re
 from tempfile import TemporaryDirectory
 import unittest
 
-from app import create_app, db
+from app import create_app, db, painel_cores
 from app.auth import accounts
 from werkzeug.security import generate_password_hash
 
@@ -97,6 +97,26 @@ class MultiUnidadeTests(unittest.TestCase):
         page = self.administrator.get("/admin").get_data(as_text=True)
         self.assertIn("Unidade real", page)
         self.assertNotIn('href="/admin"', self.a.get("/chamar").get_data(as_text=True))
+
+    def test_panel_colors_are_validated_and_saved_per_unit(self):
+        self.register(self.a, "Unidade Norte", "norte")
+        self.register(self.b, "Unidade Sul", "sul")
+        route = "/admin?unidade_painel=2"
+        form = {key: default for key, _, default in painel_cores.ITENS}
+        form.update(acao="salvar_cores", form_token=self.token(self.administrator, route), fundo="#112233")
+        self.assertEqual(self.administrator.post(route, data=form).status_code, 302)
+        self.assertIn('name="fundo" value="#112233"', self.administrator.get(route).get_data(as_text=True))
+        for endpoint in ("/painel", "/painel/compacto"):
+            self.assertIn("--painel-fundo: #112233;", self.a.get(endpoint).get_data(as_text=True))
+            self.assertNotIn("--painel-fundo:", self.b.get(endpoint).get_data(as_text=True))
+
+        form["fundo"] = "red"
+        self.administrator.post(route, data=form)
+        self.assertEqual(self.a.post(route, data=form).status_code, 302)
+        self.administrator.post(route, data={**form, "acao": "restaurar_cores", "form_token": "invalid"})
+        self.assertIn("--painel-fundo: #112233;", self.a.get("/painel").get_data(as_text=True))
+        self.administrator.post(route, data={**form, "acao": "restaurar_cores"})
+        self.assertNotIn("--painel-fundo:", self.a.get("/painel").get_data(as_text=True))
 
     def test_routes_require_login_and_credentials_are_hashed(self):
         for route in ("/", "/admin", "/chamar", "/painel", "/senhas", "/gerar", "/historico"):

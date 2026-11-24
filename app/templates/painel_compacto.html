@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Painel compacto{% endblock %}
 {% block extra_css %}
+{% include "_painel_cores.html" %}
 <style>
-  .layout-main { min-width: 0; }
-  .monitor-current { background: #0b1220; color: white; border-radius: 16px; padding: 24px; }
-  .monitor-ticket { font-size: clamp(3.5rem, 8vw, 6rem); line-height: 1.1; font-weight: 700; }
-  .monitor-counter { font-size: 2rem; font-weight: 700; }
+  .layout-main { min-width: 0; background-color: var(--painel-fundo, transparent); color: var(--painel-texto, inherit); }
+  .monitor-current { background: var(--painel-chamada, #0b1220); color: var(--painel-chamada-texto, white); border-radius: 16px; padding: 24px; }
+  .monitor-ticket { color: var(--painel-senha, inherit); font-size: clamp(3.5rem, 8vw, 6rem); line-height: 1.1; font-weight: 700; }
+  .monitor-counter { background: var(--painel-guiche, transparent); font-size: 2rem; font-weight: 700; }
+  #monitor-counter { color: var(--painel-guiche-numero, inherit); }
+  .monitor-queue { background: var(--painel-fila, var(--bs-card-bg)); color: var(--painel-fila-texto, var(--bs-body-color)); }
+  #monitor-upcoming .monitor-item { background: var(--painel-fila-cartao, transparent); }
+  #monitor-upcoming .monitor-item:first-child { background: var(--painel-fila-proxima, var(--painel-fila-cartao, transparent)); }
+  #monitor-history .monitor-item { background: var(--painel-historico, transparent); color: var(--painel-historico-texto, inherit); }
   .monitor-list { display: grid; gap: 10px; }
   .monitor-item { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; overflow-wrap: anywhere; }
   .monitor-item strong { font-size: 1.5rem; }
@@ -33,7 +39,7 @@
     </section>
   </div>
   <div class="col-lg-5">
-    <section class="card h-100 shadow-sm">
+    <section class="card monitor-queue h-100 shadow-sm">
       <div class="card-body">
         <h2 class="h5">Próximas senhas</h2>
         <div id="monitor-upcoming" class="monitor-list"><p class="text-muted mb-0">Aguardando informações da fila…</p></div>

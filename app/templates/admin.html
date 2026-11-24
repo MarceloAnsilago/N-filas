@@ -14,6 +14,16 @@
     .intro { color: #526078; margin: 0 0 24px; }
     .unit-panel { margin-top: 16px; padding-top: 16px; border-top: 1px solid #dce3ef; }
     .unit-panel h3 { margin: 0; font-size: 1rem; }
+    .panel-tabs { display: flex; gap: 8px; margin-top: 12px; border-bottom: 1px solid #dce3ef; }
+    .panel-tabs a { padding: 10px 14px; color: #526078; text-decoration: none; border-bottom: 3px solid transparent; }
+    .panel-tabs a:hover, .panel-tabs a[aria-current="page"] { color: #2563eb; }
+    .panel-tabs a[aria-current="page"] { border-bottom-color: #2563eb; font-weight: 600; }
+    .logo-section { padding-top: 16px; }
+    .color-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; margin: 16px 0; }
+    .color-grid label { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px; border: 1px solid #dce3ef; border-radius: 8px; font-size: .9rem; }
+    .color-grid input[type="color"] { flex: 0 0 44px; width: 44px; height: 36px; padding: 3px; cursor: pointer; }
+    .color-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .color-actions .primary, .color-actions .open { margin: 0; }
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px; }
     .card { display: block; background: #fff; border: 1px solid #dce3ef; border-radius: 16px; padding: 24px; text-decoration: none; color: inherit; transition: border-color .2s, box-shadow .2s; }
     .card:hover { border-color: #2563eb; box-shadow: 0 8px 24px #17203312; }
@@ -61,9 +71,38 @@
         <h2>{{ unidade.nome }}</h2>
         <p>Login: <strong>{{ unidade.login }}</strong></p>
         {% if unidade.id == unidade_painel %}
+        {% set logo_ativo = request.args.get('aba') == 'logo' %}
         <section class="unit-panel" aria-labelledby="painel-titulo-{{ unidade.id }}">
           <h3 id="painel-titulo-{{ unidade.id }}">Personalizar painel</h3>
-          <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+          <nav class="panel-tabs" aria-label="Opções de personalização do painel">
+            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if not logo_ativo %} aria-current="page"{% endif %}>Cores</a>
+            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if logo_ativo %} aria-current="page"{% endif %}>Logo</a>
+          </nav>
+          {% if logo_ativo %}
+          <div class="logo-section">
+            <p>O envio de logo ainda não está disponível.</p>
+            <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+          </div>
+          {% else %}
+          <form method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id) }}">
+            <input type="hidden" name="form_token" value="{{ form_token }}">
+            <datalist id="paleta-painel">
+              {% for cor in ['#ffffff', '#f1f5f9', '#020617', '#032241', '#075bff', '#00a3d7', '#00866e', '#8b5cf6', '#ffb62d', '#dc2626'] %}
+              <option value="{{ cor }}"></option>
+              {% endfor %}
+            </datalist>
+            <div class="color-grid">
+              {% for chave, rotulo, padrao in itens_painel %}
+              <label><input type="color" name="{{ chave }}" value="{{ cores.get(chave, padrao) }}" list="paleta-painel"> {{ rotulo }}</label>
+              {% endfor %}
+            </div>
+            <div class="color-actions">
+              <button type="submit" class="primary" name="acao" value="salvar_cores">Salvar cores</button>
+              <button type="submit" name="acao" value="restaurar_cores">Restaurar cores padrão</button>
+              <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+            </div>
+          </form>
+          {% endif %}
         </section>
         {% else %}
         <a class="open" href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}">Personalizar painel</a>

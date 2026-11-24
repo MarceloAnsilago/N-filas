@@ -9,7 +9,7 @@ from threading import Lock
 from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db
+from . import db, painel_cores
 from .painel_events import PainelEvents
 
 bp = Blueprint("auth", __name__)
@@ -68,6 +68,12 @@ def init_auth(app):
                 SELECT id, nome, login, senha_hash, legacy, is_admin FROM unidade_login_anterior
             """)
             conn.execute("DROP TABLE unidade_login_anterior")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS painel_cor (
+                unidade_id INTEGER NOT NULL, item TEXT NOT NULL, cor TEXT NOT NULL,
+                PRIMARY KEY (unidade_id, item)
+            )
+        """)
     app.extensions["unidades_lock"] = Lock()
     app.extensions["unidades_events"] = {}
     app.register_blueprint(bp)
@@ -150,6 +156,29 @@ def login_page(admin_only):
 
 
 def admin_page():
+    unidade_painel = request.args.get("unidade_painel", type=int)
+    with accounts() as conn:
+        if "unidade_painel" in request.args:
+            unidade = conn.execute(
+                "SELECT id FROM unidade_login WHERE id = ? AND is_admin = 0", (unidade_painel,)
+            ).fetchone()
+            if unidade is None:
+                abort(404)
+        if request.method == "POST" and unidade_painel is not None:
+            acao = request.form.get("acao")
+            if not valid_form():
+                flash("Atualize a página e tente novamente.", "warning")
+            elif acao in {"salvar_cores", "restaurar_cores"}:
+                cores = {} if acao == "restaurar_cores" else painel_cores.validar_cores(request.form)
+                if cores is None:
+                    flash("Informe uma cor válida para cada item.", "warning")
+                else:
+                    painel_cores.gravar_cores(conn, unidade_painel, cores)
+                    flash("Cores do painel atualizadas.", "success")
+            else:
+                abort(400)
+            return redirect(url_for("web.admin", unidade_painel=unidade_painel, _anchor=f"unidade-{unidade_painel}"))
+
     if request.method == "POST":
         nome = (request.form.get("nome") or "").strip()
         username = nome.lower()
@@ -181,10 +210,17 @@ def admin_page():
                 flash("Este login ja esta em uso. Escolha outro.", "warning")
     with accounts() as conn:
         unidades = [dict(row) for row in conn.execute("SELECT id, nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
-    unidade_painel = request.args.get("unidade_painel", type=int)
-    if "unidade_painel" in request.args and not any(unit["id"] == unidade_painel for unit in unidades):
-        abort(404)
-    return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel, form_token=form_token())
+        cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None else {}
+    return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel,
+                           itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token())
+
+
+def cores_painel_da_unidade():
+    unidade = g.get("unidade")
+    if unidade is None:
+        return {}
+    with accounts() as conn:
+        return painel_cores.ler_cores(conn, unidade["id"])
 
 
 @bp.post("/logout")
