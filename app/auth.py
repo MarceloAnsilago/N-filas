@@ -6,7 +6,7 @@ import secrets
 import sqlite3
 from threading import Lock
 
-from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import db
@@ -181,7 +181,10 @@ def admin_page():
                 flash("Este login ja esta em uso. Escolha outro.", "warning")
     with accounts() as conn:
         unidades = [dict(row) for row in conn.execute("SELECT id, nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
-    return render_template("admin.html", unidades=unidades, form_token=form_token())
+    unidade_painel = request.args.get("unidade_painel", type=int)
+    if "unidade_painel" in request.args and not any(unit["id"] == unidade_painel for unit in unidades):
+        abort(404)
+    return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel, form_token=form_token())
 
 
 @bp.post("/logout")
