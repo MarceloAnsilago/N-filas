@@ -2,12 +2,14 @@
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #020f20; color: var(--painel-texto, #fff); }
 .display-shell { min-height: 100dvh; padding: 12px; display: grid; grid-template-columns: minmax(0, 2.7fr) minmax(280px, 1fr); grid-template-rows: 98px minmax(0, 1fr) 116px 42px; gap: 0 14px; background: var(--painel-fundo, radial-gradient(ellipse at 100% 100%, #006a4255, transparent 30%), radial-gradient(ellipse at 5% 0%, #0a65a066, transparent 60%), #032241); }
-.institution { display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--painel-cabecalho, linear-gradient(110deg, #052343, #0b417a)); overflow: hidden; }
+.institution { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 12px; background: var(--painel-cabecalho, linear-gradient(110deg, #052343, #0b417a)); }
+.institution-brand { display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; padding: 0 8px; }
 .institution-logo { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 50%; padding: 4px; }
-.institution-custom-logo { display: block; width: auto; max-width: min(330px, 100%); height: clamp(38px, 7vw, 76px); object-fit: contain; object-position: left center; }
+.institution-custom-logo { display: block; width: auto; max-width: 100%; height: clamp(38px, 7vw, 76px); object-fit: contain; }
 .institution strong { display: block; font-size: clamp(26px, 3.1vw, 46px); letter-spacing: -1.5px; line-height: 1; }
 .institution span { display: block; font-weight: 600; font-size: clamp(9px, 1vw, 14px); margin-top: 5px; }
-.institution-motto { border-left: 2px solid #b3d5f3; padding: 0 0 0 28px; margin-left: 20px; font: italic 23px/1.1 'Segoe Print', cursive; transform: rotate(-5deg); }
+.institution-motto { display: grid; place-content: center; border-left: 2px solid #b3d5f3; padding: 0 10px; text-align: center; font: italic clamp(15px, 1.5vw, 23px)/1.2 'Segoe Print', cursive; }
+@media (max-width: 900px) { .institution { grid-template-columns: minmax(0, 1fr); } }
 .clock-block { display: flex; flex-direction: column; justify-content: center; padding: 4px 18px; }
 .clock-block time { font-size: clamp(40px, 4.5vw, 65px); line-height: 1; font-weight: 800; letter-spacing: -2px; font-variant-numeric: tabular-nums; }
 .clock-block > span { margin-top: 6px; font-size: 14px; }
@@ -103,6 +105,6 @@ h2 { margin: 0; font-size: 16px; }
 @keyframes call-pulse { 50% { box-shadow: 0 0 0 8px #33b9ff80, 0 18px 50px #00163255; } }
 @media (prefers-reduced-motion: reduce) { .current-call.is-calling { animation: none; } }
 @media (min-width: 901px) { .display-shell { height: 100dvh; } }
-@media (max-width: 1100px) { .display-shell { grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); grid-template-rows: 85px minmax(0, 1fr) 112px 42px; } .institution-motto { font-size: 18px; padding-left: 16px; margin-left: 10px; } .institution { padding: 8px; gap: 8px; } .current-call { width: 88%; } .service-message strong { font-size: 23px; } }
+@media (max-width: 1100px) { .display-shell { grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); grid-template-rows: 85px minmax(0, 1fr) 112px 42px; } .institution { padding: 8px; } .current-call { width: 88%; } .service-message strong { font-size: 23px; } }
 @media (max-width: 900px) { .display-shell { grid-template-columns: minmax(0, 1fr) 220px; grid-template-rows: auto auto auto auto; padding: 8px; gap: 10px; } .institution-motto { display: none; } .institution-logo { width: 44px; height: 44px; } .clock-block { padding: 5px; } .clock-block time { font-size: 35px; } .clock-block > span { font-size: 11px; } .stage { grid-column: 1 / -1; min-height: 430px; } .sidebar { grid-column: 1 / -1; grid-row: auto; display: grid; grid-template-columns: 1fr 1fr; } .history { grid-column: 1 / -1; } .history-list { grid-template-columns: repeat(5, minmax(0, 1fr)); } .panel-footer { flex-wrap: wrap; font-size: 11px; } .current-ticket { font-size: 110px; } }
 @media (max-width: 520px) { .display-shell { grid-template-columns: minmax(0, 1fr) 120px; } .institution strong { font-size: 23px; letter-spacing: -1px; } .institution span { font-size: 8px; } .institution-logo { width: 32px; height: 32px; } .clock-block time { font-size: 29px; } .stage { min-height: 360px; } .call-overlay { padding: 12px; } .current-call { width: 100%; padding: 16px; } .current-call h1 { font-size: 16px; gap: 10px; } .current-ticket { font-size: 95px; } .counter-destination strong { font-size: 56px; } .sidebar { grid-template-columns: 1fr; } .history-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
