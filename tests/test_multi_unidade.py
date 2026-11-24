@@ -1,9 +1,7 @@
-import os
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
 
 from app import create_app, db
 from app.auth import accounts
@@ -14,12 +12,9 @@ class MultiUnidadeTests(unittest.TestCase):
     def setUp(self):
         self.directory = TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        self.env = patch.dict(os.environ, {"THERMAL_PRINTER_MODE": "queue", "PRINT_AGENT_TOKEN": "legacy-agent-token"})
-        self.env.start()
-        self.addCleanup(self.env.stop)
         self.app = create_app({"TESTING": True, "SECRET_KEY": "test-secret", "DB_PATH": str(Path(self.directory.name) / "original.db")})
         with self.app.app_context(), accounts() as conn:
-            conn.execute("INSERT INTO unidade_login (nome, login, senha_hash, legacy, print_token, is_admin) VALUES (?, ?, ?, 0, ?, 1)", ("Administrador", "admin", generate_password_hash("admin123"), "admin-token"))
+            conn.execute("INSERT INTO unidade_login (nome, login, senha_hash, legacy, is_admin) VALUES (?, ?, ?, 0, 1)", ("Administrador", "admin", generate_password_hash("admin123")))
         self.administrator = self.app.test_client()
         with self.administrator.session_transaction() as sess:
             sess["unidade_id"] = 1
@@ -36,24 +31,16 @@ class MultiUnidadeTests(unittest.TestCase):
             client.post("/login", data={"login": name, "senha": "senha-teste", "form_token": self.token(client, "/login")})
         return result
 
-    def test_generation_and_all_printing_use_authenticated_unit(self):
+    def test_generation_and_emission_use_authenticated_unit(self):
         self.register(self.a, "Unidade real", "real")
         page = self.a.get("/gerar").get_data(as_text=True)
         self.assertNotIn('name="unidade"', page)
         self.assertEqual(self.a.post("/gerar/salvar-unidade", data={"unidade": "Outra"}).status_code, 404)
         response = self.a.post("/gerar", data={"unidade": "Outra", "senha_inicial": "1", "senha_final": "1", "data_execucao": "2026-11-04"})
         self.assertEqual(response.status_code, 302)
-        page = self.a.get("/imprimir?data=2026-11-04").get_data(as_text=True)
-        self.assertIn("Unidade real", page)
-        self.assertNotIn("Outra", page)
-        self.assertTrue(self.a.post("/senhas/imprimir/normal", data={"unidade": "Outra"}).get_json()["ok"])
-        self.assertTrue(self.a.post("/senhas/imprimir/teste").get_json()["ok"])
+        self.assertTrue(self.a.post("/senhas/emitir/normal", data={"unidade": "Outra"}).get_json()["ok"])
         with self.app.app_context(), db.conectar() as conn:
             self.assertEqual({row["unidade"] for row in conn.execute("SELECT unidade FROM senha")}, {"Unidade real"})
-            self.assertEqual({row["unidade"] for row in conn.execute("SELECT unidade FROM print_job")}, {"Unidade real"})
-        with patch("app.routes.printer.printer_mode", return_value="local"), patch("app.routes.printer.imprimir_senha", return_value={"mode": "local"}) as printer:
-            self.assertTrue(self.a.post("/senhas/imprimir/teste").get_json()["ok"])
-            self.assertEqual(printer.call_args.kwargs["unidade"], "Unidade real")
 
     def test_unit_selector_lists_units_only_and_preserves_failed_selection(self):
         empty = self.a.get("/login").get_data(as_text=True)
@@ -128,7 +115,7 @@ class MultiUnidadeTests(unittest.TestCase):
         self.assertEqual(self.a.post("/login?next=//example.com", data={"login": "São Miguel", "senha": "senha-teste", "form_token": token}).location, "/chamar")
         self.assertEqual(self.a.get("/painel").status_code, 200)
 
-    def test_two_units_isolate_numbers_calls_events_and_print_jobs(self):
+    def test_two_units_isolate_numbers_calls_events(self):
         self.register(self.a, "São Miguel", "saomiguel")
         self.register(self.b, "Santana", "santana")
         stream_a = self.a.get("/painel/events", buffered=False)
@@ -137,8 +124,8 @@ class MultiUnidadeTests(unittest.TestCase):
         self.addCleanup(stream_b.close)
         initial_b = next(iter(stream_b.response)).decode()
         self.assertIn('"senha_atual": null', initial_b)
-        emitted_a = self.a.post("/senhas/imprimir/normal").get_json()
-        emitted_b = self.b.post("/senhas/imprimir/normal").get_json()
+        emitted_a = self.a.post("/senhas/emitir/normal").get_json()
+        emitted_b = self.b.post("/senhas/emitir/normal").get_json()
         self.assertTrue(emitted_a["ok"])
         self.assertEqual(emitted_a["senha"], emitted_b["senha"])
         self.a.post("/chamar", data={"acao": "chamar", "terminal": "1", "usuario": "Operador A"})
@@ -153,14 +140,6 @@ class MultiUnidadeTests(unittest.TestCase):
         # Mesmo com IDs iguais nos bancos, uma tentativa de encerrar nao afeta a outra unidade.
         self.b.post("/historico", data={"encerrar_id": emitted_a["id"], "acao": "compareceu"})
         self.assertEqual(self.a.get("/painel/status").get_json()["senha_atual"]["status"], "aberto")
-        with self.app.app_context(), accounts() as conn:
-            units = conn.execute("SELECT * FROM unidade_login WHERE is_admin = 0 ORDER BY id").fetchall()
-        for unit in units:
-            agent = self.app.test_client()
-            result = agent.post("/print-agent/jobs/claim", headers={"X-Print-Agent-Token": unit["print_token"]})
-            self.assertEqual(result.status_code, 200)
-            self.assertEqual(result.get_json()["job"]["unidade"], unit["nome"])
-        self.assertEqual(self.app.test_client().post("/print-agent/jobs/claim", headers={"X-Print-Agent-Token": "invalid"}).status_code, 401)
 
     def test_first_unit_keeps_existing_data_and_duplicate_registration_preserves_it(self):
         with self.app.app_context():

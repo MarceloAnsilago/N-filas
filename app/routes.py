@@ -2,12 +2,11 @@
 from collections import Counter
 import logging
 import os
-import json
 from urllib.parse import parse_qs, urlparse
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for, session, jsonify, Response, current_app, g
 
-from . import db, printer
+from . import db
 
 logger = logging.getLogger(__name__)
 
@@ -321,62 +320,6 @@ def reiniciar_totem():
     return redirect(url_for("web.gerar_senhas"))
 
 
-@bp.route("/imprimir", methods=["GET"])
-def imprimir():
-    todas_senhas = db.listar_senhas(status="aguardando")
-
-    datas_disponiveis = sorted(
-        {
-            item.get("data_execucao") or _extrair_data_iso(item.get("hora"))
-            for item in todas_senhas
-            if item.get("data_execucao") or item.get("hora")
-        }
-    )
-    datas_fmt = [
-        {"valor": valor, "label": datetime.strptime(valor, "%Y-%m-%d").strftime("%d/%m/%Y")}
-        for valor in datas_disponiveis
-    ]
-
-    data_selecionada = request.args.get("data")
-    if data_selecionada not in datas_disponiveis:
-        data_selecionada = db.obter_data_producao_ativa()
-        if data_selecionada not in datas_disponiveis:
-            data_selecionada = datas_disponiveis[-1] if datas_disponiveis else None
-
-    if data_selecionada:
-        senhas_raw = [
-            item
-            for item in todas_senhas
-            if (item.get("data_execucao") or _extrair_data_iso(item.get("hora"))) == data_selecionada
-        ]
-        titulo = f"Senhas de {datetime.strptime(data_selecionada, '%Y-%m-%d').strftime('%d/%m/%Y')}"
-    else:
-        senhas_raw = []
-        titulo = "Nenhuma data com senhas aguardando"
-
-    senhas = [
-        {
-            "unidade": db.obter_unidade_padrao(),
-            "senha": f"{int(item.get('senha', 0)):03}",
-            "data_formatada": _formatar_data_local(item.get("hora")),
-        }
-        for item in senhas_raw
-    ]
-
-    if data_selecionada and not senhas:
-        flash("Nenhuma senha encontrada para a data selecionada.", "info")
-    elif not datas_disponiveis:
-        flash("Nao ha senhas aguardando para imprimir.", "info")
-
-    return render_template(
-        "imprimir.html",
-        titulo=titulo,
-        senhas=senhas,
-        datas_disponiveis=datas_fmt,
-        data_selecionada=data_selecionada,
-    )
-
-
 @bp.route("/historico", methods=["GET", "POST"])
 def historico():
     registros = db.listar_todas_senhas()
@@ -519,22 +462,24 @@ def painel():
 
 @bp.route("/senhas")
 def senhas():
-    printer_ok, printer_message = printer.printer_ready()
-    return render_template(
-        "senhas.html",
-        printer_ok=printer_ok,
-        printer_message=printer_message,
-    )
+    return render_template("senhas.html")
 
 
-@bp.route("/senhas/imprimir/<prioridade>", methods=["POST"])
-def imprimir_senha(prioridade: str):
-    return _emitir_e_imprimir_senha(prioridade)
+@bp.post("/senhas/emitir/<prioridade>")
+def emitir_senha(prioridade: str):
+    prioridade = prioridade.strip().lower()
+    if prioridade not in PRIORIDADE_LABELS:
+        return jsonify(ok=False, message="Tipo de senha inválido."), 400
 
+    try:
+        identificador, numero_int = db.emitir_senha_totem(prioridade)
+    except db.LimitePreferencial:
+        return jsonify(ok=False, message="A fila preferencial atingiu o limite 100. Reinicie o contador para voltar ao 001."), 409
 
-@bp.route("/senhas/imprimir/teste", methods=["POST"])
-def imprimir_teste():
-    return _imprimir_teste()
+    _notify_painel()
+    numero = f"{numero_int:03}"
+    return jsonify(ok=True, message=f"{PRIORIDADE_LABELS[prioridade]} {numero} emitida.", senha=numero,
+                   prioridade=prioridade, id=identificador)
 
 
 @bp.route("/painel/status")
@@ -561,46 +506,6 @@ def painel_events():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
-
-
-@bp.route("/print-agent/jobs/claim", methods=["POST"])
-def print_agent_claim():
-    erro = _validar_print_agent()
-    if erro:
-        return erro
-
-    job = db.claim_next_print_job()
-    if not job:
-        return ("", 204)
-    return jsonify({"ok": True, "job": job})
-
-
-@bp.route("/print-agent/jobs/<int:job_id>/complete", methods=["POST"])
-def print_agent_complete(job_id: int):
-    erro = _validar_print_agent()
-    if erro:
-        return erro
-
-    payload = request.get_json(silent=True) or {}
-    printer_info = payload.get("printer_info")
-    if isinstance(printer_info, (dict, list)):
-        printer_info = json.dumps(printer_info, ensure_ascii=True)
-    elif printer_info is not None:
-        printer_info = str(printer_info)
-    db.concluir_print_job(job_id, printer_info=printer_info)
-    return jsonify({"ok": True})
-
-
-@bp.route("/print-agent/jobs/<int:job_id>/error", methods=["POST"])
-def print_agent_error(job_id: int):
-    erro = _validar_print_agent()
-    if erro:
-        return erro
-
-    payload = request.get_json(silent=True) or {}
-    message = str(payload.get("message") or "Erro de impressao nao informado.")
-    db.falhar_print_job(job_id, message)
-    return jsonify({"ok": True})
 
 
 def _formatar_data_local(valor_iso: str | None) -> str:
@@ -651,142 +556,6 @@ def _parse_int_from_form(form, campo, default):
 def _notify_painel():
     g.get("painel_events", current_app.extensions["painel_events"]).publish(
         lambda: db.obter_painel_status_snapshot(MAX_PAINEL_ULTIMAS)
-    )
-
-
-def _validar_print_agent():
-    if g.get("unidade") is not None:
-        return None  # O middleware ja validou o token exclusivo da unidade.
-    token_cfg = (os.getenv("PRINT_AGENT_TOKEN") or "").strip()
-    if not token_cfg:
-        return jsonify({"ok": False, "message": "PRINT_AGENT_TOKEN nao configurado."}), 503
-
-    token_req = (request.headers.get("X-Print-Agent-Token") or "").strip()
-    if not token_req and request.authorization:
-        token_req = (request.authorization.password or request.authorization.username or "").strip()
-    if not token_req:
-        auth_header = request.headers.get("Authorization") or ""
-        if auth_header.lower().startswith("bearer "):
-            token_req = auth_header[7:].strip()
-
-    if token_req != token_cfg:
-        return jsonify({"ok": False, "message": "Nao autorizado."}), 401
-    return None
-
-
-def _emitir_e_imprimir_senha(prioridade: str):
-    prioridade = (prioridade or "").strip().lower()
-    if prioridade not in PRIORIDADE_LABELS:
-        return jsonify({"ok": False, "message": "Tipo de senha invalido."}), 400
-
-    unidade = db.obter_unidade_padrao()
-    data_execucao = date.today().isoformat()
-    try:
-        numero_int = db.proximo_numero_totem(prioridade)
-    except ValueError:
-        return jsonify(
-            {
-                "ok": False,
-                "message": "A fila preferencial atingiu o limite 100. Reinicie o contador para voltar ao 001.",
-            }
-        ), 409
-    numero = f"{numero_int:03}"
-    horario_local = datetime.now(db.FUSO_HORARIO)
-    modo_impressao = printer.printer_mode()
-    try:
-        if modo_impressao == "queue":
-            job_id = db.criar_print_job(
-                numero=numero,
-                tipo=PRIORIDADE_LABELS[prioridade],
-                unidade=unidade,
-                prioridade=prioridade,
-                data_hora=horario_local.isoformat(),
-                teste=False,
-            )
-            metadata = {"mode": "queue", "job_id": job_id}
-        else:
-            metadata = printer.imprimir_senha(
-                numero=numero,
-                tipo=PRIORIDADE_LABELS[prioridade],
-                unidade=unidade,
-                data_hora=horario_local,
-                teste=False,
-            )
-        identificador = db.inserir_senha(
-            numero_int,
-            unidade,
-            usuario="totem",
-            data_execucao=datetime.strptime(data_execucao, "%Y-%m-%d").date(),
-            prioridade=prioridade,
-            origem="totem",
-        )
-        db.registrar_numero_totem(prioridade, numero_int)
-        db.definir_data_producao(None)
-        db.definir_origem_padrao("totem")
-        _notify_painel()
-    except printer.PrinterError as exc:
-        logger.exception("Falha ao imprimir senha %s", prioridade)
-        return jsonify({"ok": False, "message": str(exc)}), 503
-    except Exception:
-        logger.exception("Falha inesperada ao emitir/imprimir senha %s", prioridade)
-        return jsonify({"ok": False, "message": "Erro interno ao emitir a senha."}), 500
-
-    return jsonify(
-        {
-            "ok": True,
-            "message": (
-                f"{PRIORIDADE_LABELS[prioridade]} {numero} enviada para fila de impressao."
-                if modo_impressao == "queue"
-                else f"{PRIORIDADE_LABELS[prioridade]} {numero} enviada para impressora."
-            ),
-            "senha": numero,
-            "prioridade": prioridade,
-            "id": identificador,
-            "printer_job": metadata,
-        }
-    )
-
-
-def _imprimir_teste():
-    unidade = db.obter_unidade_padrao()
-    agora = datetime.now(db.FUSO_HORARIO)
-    modo_impressao = printer.printer_mode()
-    try:
-        if modo_impressao == "queue":
-            job_id = db.criar_print_job(
-                numero="000",
-                tipo="Senha normal",
-                unidade=unidade,
-                prioridade="normal",
-                data_hora=agora.isoformat(),
-                teste=True,
-            )
-            metadata = {"mode": "queue", "job_id": job_id}
-        else:
-            metadata = printer.imprimir_senha(
-                numero="000",
-                tipo="Senha normal",
-                unidade=unidade,
-                data_hora=agora,
-                teste=True,
-            )
-    except printer.PrinterError as exc:
-        logger.exception("Falha ao imprimir teste da impressora")
-        return jsonify({"ok": False, "message": str(exc)}), 503
-    except Exception:
-        logger.exception("Falha inesperada ao imprimir teste")
-        return jsonify({"ok": False, "message": "Erro interno ao imprimir teste."}), 500
-
-    return jsonify(
-        {
-            "ok": True,
-            "message": (
-                "Impressao de teste enviada para a fila."
-                if modo_impressao == "queue"
-                else "Impressao de teste enviada para a impressora."
-            ),
-            "printer_job": metadata,
-        }
     )
 
 

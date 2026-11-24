@@ -58,10 +58,6 @@
       <article class="card" style="margin-top: 12px;">
         <h2>{{ unidade.nome }}</h2>
         <p>Login: <strong>{{ unidade.login }}</strong></p>
-        <details style="margin-top: 12px;">
-          <summary>Token do agente de impress?o</summary>
-          <code style="overflow-wrap: anywhere;">{{ unidade.print_token }}</code>
-        </details>
       </article>
       {% else %}<p>Nenhuma unidade cadastrada.</p>{% endfor %}
     </section>
@@ -69,7 +65,6 @@
       {% for endpoint, title, description in [
         ('web.gerar_senhas', 'Gerar senhas', 'Prepare as senhas para o atendimento.'),
         ('web.chamar', 'Chamar senhas', 'Acompanhe a fila e realize as chamadas.'),
-        ('web.imprimir', 'Imprimir', 'Acesse a impressão de senhas.'),
         ('web.historico', 'Histórico', 'Consulte os registros de atendimento.'),
         ('web.painel', 'Painel', 'Abra o painel de chamadas.'),
         ('web.painel_compacto', 'Painel compacto', 'Abra a versão compacta do painel.')

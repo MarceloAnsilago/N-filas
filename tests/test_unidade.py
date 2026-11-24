@@ -1,8 +1,6 @@
-﻿import os
-from pathlib import Path
+﻿from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
 
 from flask import Flask
 from app import db
@@ -25,28 +23,26 @@ class UnidadeTests(unittest.TestCase):
             db.init_db()
         self.client = self.app.test_client()
 
-    def test_default_and_saved_name_reach_print_queue(self):
+    def test_emission_uses_default_and_saved_unit_name(self):
         self.assertNotIn('name="unidade"', self.client.get("/gerar").get_data(as_text=True))
-        with patch.dict(os.environ, {"THERMAL_PRINTER_MODE": "queue"}):
-            self.assertEqual(self.client.post("/senhas/imprimir/teste").status_code, 200)
-            with self.app.app_context():
-                db.salvar_unidade_padrao("Nova Unidade")
-            self.assertEqual(self.client.post("/senhas/imprimir/normal").status_code, 200)
-            self.assertEqual(self.client.post("/senhas/imprimir/teste").status_code, 200)
+        normal = self.client.post("/senhas/emitir/normal")
+        self.assertEqual(normal.get_json()["senha"], "101")
+        with self.app.app_context():
+            db.salvar_unidade_padrao("Nova Unidade")
+        preferencial = self.client.post("/senhas/emitir/preferencial")
+        self.assertEqual(preferencial.get_json()["senha"], "001")
         with self.app.app_context(), db.conectar() as conn:
-            jobs = conn.execute("SELECT unidade FROM print_job ORDER BY id").fetchall()
-            self.assertEqual([row["unidade"] for row in jobs], ["ULSAV SMG", "Nova Unidade", "Nova Unidade"])
-            self.assertEqual(conn.execute("SELECT unidade FROM senha").fetchone()["unidade"], "Nova Unidade")
+            rows = conn.execute("SELECT unidade FROM senha ORDER BY id").fetchall()
+            self.assertEqual([row["unidade"] for row in rows], ["ULSAV SMG", "Nova Unidade"])
 
     def test_wake_lock_is_loaded_only_on_ticket_emission_page(self):
-        with patch("app.routes.printer.printer_ready", return_value=(True, "Pronta")):
-            response = self.client.get("/senhas")
+        response = self.client.get("/senhas")
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
         self.assertIn('src="/static/js/senhas-wake-lock.js" defer', page)
         self.assertIn('id="wake-lock-notice" role="status" hidden', page)
-        self.assertIn('data-print-url="/senhas/imprimir/normal"', page)
-        self.assertIn('data-print-url="/senhas/imprimir/preferencial"', page)
+        self.assertIn('data-issue-url="/senhas/emitir/normal"', page)
+        self.assertIn('data-issue-url="/senhas/emitir/preferencial"', page)
         for route in ("/", "/gerar", "/painel", "/chamar"):
             with self.subTest(route=route):
                 response = self.client.get(route)
@@ -60,6 +56,3 @@ class UnidadeTests(unittest.TestCase):
         with self.app.app_context(), db.conectar() as conn:
             self.assertEqual(db.obter_unidade_padrao(), "Unidade Salva")
             self.assertEqual(conn.execute("SELECT unidade FROM senha").fetchone()["unidade"], "Unidade Salva")
-        page = self.client.get("/imprimir?data=2026-11-04").get_data(as_text=True)
-        self.assertIn("Unidade Salva", page)
-

@@ -1,10 +1,9 @@
 import json
-import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from flask import Flask
 
@@ -108,7 +107,7 @@ class PainelEventsTests(unittest.TestCase):
                 response.close()
 
     def test_queue_fragment_tracks_totem_emissions_and_calls(self):
-        with TemporaryDirectory() as directory, patch.dict(os.environ, {"THERMAL_PRINTER_MODE": "queue"}):
+        with TemporaryDirectory() as directory:
             templates = Path(__file__).resolve().parents[1] / "app" / "templates"
             app = Flask(__name__, template_folder=str(templates))
             app.config.update(TESTING=True, SECRET_KEY="test", DB_PATH=str(Path(directory) / "test.db"))
@@ -126,7 +125,7 @@ class PainelEventsTests(unittest.TestCase):
             next(stream)
             try:
                 for priority in ("normal", "preferencial"):
-                    emitted = client.post(f"/senhas/imprimir/{priority}")
+                    emitted = client.post(f"/senhas/emitir/{priority}")
                     self.assertEqual(emitted.status_code, 200)
                     snapshot = payload(next(stream))
                     self.assertTrue(snapshot["proximas_senhas"])

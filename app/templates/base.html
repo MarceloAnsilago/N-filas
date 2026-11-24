@@ -140,12 +140,6 @@
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'web.imprimir' %}active{% endif %}" href="{{ url_for('web.imprimir') }}">
-            <i class="bx bxs-printer"></i>
-            <span class="label">Imprimir</span>
-          </a>
-        </li>
-        <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'web.historico' %}active{% endif %}" href="{{ url_for('web.historico') }}">
             <i class="bx bxs-doughnut-chart"></i>
             <span class="label">Historico</span>

@@ -62,23 +62,6 @@ def init_db():
                 valor TEXT
             )
         """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS print_job (
-                id INTEGER PRIMARY KEY,
-                numero TEXT NOT NULL,
-                tipo TEXT NOT NULL,
-                unidade TEXT NOT NULL,
-                prioridade TEXT NOT NULL,
-                data_hora TEXT NOT NULL,
-                teste INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'pending',
-                claimed_at TEXT,
-                completed_at TEXT,
-                last_error TEXT,
-                printer_info TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
         colunas = [row["name"] for row in conn.execute("PRAGMA table_info(senha)").fetchall()]
         if "data_execucao" not in colunas:
             conn.execute("ALTER TABLE senha ADD COLUMN data_execucao TEXT")
@@ -100,7 +83,6 @@ def init_db():
             )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_senha_status ON senha(status, senha)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_senha_status_updated ON senha(status, atualizado_em DESC, id DESC)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_print_job_status_id ON print_job(status, id)")
         conn.commit()
 
 def obter_unidade_padrao() -> str:
@@ -152,6 +134,11 @@ def inserir_senha(
     origem: str = "lote",
 ) -> int:
     """Insere nova senha no banco na data informada (ou dia atual)."""
+    with conectar() as conn:
+        return _inserir_senha(conn, numero, unidade, usuario, data_execucao, prioridade, origem)
+
+
+def _inserir_senha(conn, numero, unidade, usuario, data_execucao, prioridade, origem):
     if data_execucao is None:
         data_execucao = datetime.now().date()
     hora_base = datetime.combine(data_execucao, time.min)
@@ -168,12 +155,10 @@ def inserir_senha(
         prioridade,
         origem,
     )
-    with conectar() as conn:
-        cursor = conn.execute("""
-            INSERT INTO senha (senha, hora, data_execucao, usuario, resposta, status, terminal, unidade, prioridade, origem)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, dados)
-        conn.commit()
+    cursor = conn.execute("""
+        INSERT INTO senha (senha, hora, data_execucao, usuario, resposta, status, terminal, unidade, prioridade, origem)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, dados)
     return cursor.lastrowid
 
 
@@ -391,55 +376,58 @@ def obter_origem_padrao() -> str:
     return valor if valor in {"lote", "totem"} else "lote"
 
 
+class LimitePreferencial(ValueError):
+    pass
+
+
 def obter_ultimo_numero_totem(prioridade: str) -> int:
-    """Retorna o ultimo numero emitido pelo totem para a prioridade."""
-    chave = _chave_contador_totem(prioridade)
     with conectar() as conn:
-        row = conn.execute(
-            "SELECT valor FROM configuracao WHERE chave = ?",
-            (chave,),
-        ).fetchone()
-    if not row or not row["valor"]:
-        return 0 if prioridade == "preferencial" else 100
+        return _ultimo_numero_totem(conn, prioridade)
+
+
+def _ultimo_numero_totem(conn, prioridade: str) -> int:
+    row = conn.execute("SELECT valor FROM configuracao WHERE chave = ?", (_chave_contador_totem(prioridade),)).fetchone()
+    base = 0 if prioridade == "preferencial" else 100
     try:
-        return int(str(row["valor"]).strip())
-    except ValueError:
-        return 0 if prioridade == "preferencial" else 100
+        return int(row["valor"]) if row else base
+    except (TypeError, ValueError):
+        return base
 
 
-def proximo_numero_totem(prioridade: str) -> int:
-    """Calcula o proximo numero do totem conforme a faixa da prioridade."""
-    prioridade = _normalizar_prioridade(prioridade)
-    ultimo = obter_ultimo_numero_totem(prioridade)
-    proximo = ultimo + 1
-    if prioridade == "preferencial" and proximo > 100:
-        raise ValueError("limite_preferencial")
-    if prioridade == "normal" and proximo < 101:
-        proximo = 101
-    return proximo
+def _salvar_configuracao(conn, chave, valor):
+    conn.execute(
+        """
+        INSERT INTO configuracao (chave, valor) VALUES (?, ?)
+        ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor
+        """,
+        (chave, valor),
+    )
 
 
-def registrar_numero_totem(prioridade: str, numero: int) -> None:
-    """Persiste o ultimo numero emitido pelo totem."""
-    prioridade = _normalizar_prioridade(prioridade)
-    chave = _chave_contador_totem(prioridade)
+def emitir_senha_totem(prioridade: str):
+    unidade = obter_unidade_padrao()
     with conectar() as conn:
-        conn.execute(
-            """
-            INSERT INTO configuracao (chave, valor)
-            VALUES (?, ?)
-            ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor
-            """,
-            (chave, str(int(numero))),
-        )
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        numero = _ultimo_numero_totem(conn, prioridade) + 1
+        if prioridade == "preferencial" and numero > 100:
+            raise LimitePreferencial
+        if prioridade == "normal":
+            numero = max(101, numero)
+
+        identificador = _inserir_senha(conn, numero, unidade, "totem", datetime.now(FUSO_HORARIO).date(),
+                                     prioridade, "totem")
+        _salvar_configuracao(conn, _chave_contador_totem(prioridade), str(numero))
+        _salvar_configuracao(conn, "origem_padrao", "totem")
+        conn.execute("DELETE FROM configuracao WHERE chave = 'data_producao'")
+    return identificador, numero
 
 
 def reiniciar_numero_totem(prioridade: str) -> None:
     """Reinicia o contador do totem para a prioridade."""
     prioridade = _normalizar_prioridade(prioridade)
     valor_base = 0 if prioridade == "preferencial" else 100
-    registrar_numero_totem(prioridade, valor_base)
+    with conectar() as conn:
+        _salvar_configuracao(conn, _chave_contador_totem(prioridade), str(valor_base))
 
 
 def contar_remanescentes_totem(prioridade: str) -> int:
@@ -499,114 +487,6 @@ def excluir_remanescentes_totem(prioridade: str) -> int:
         )
         conn.commit()
     return cursor.rowcount
-
-
-def criar_print_job(
-    numero: str,
-    tipo: str,
-    unidade: str,
-    prioridade: str,
-    data_hora: str,
-    teste: bool = False,
-) -> int:
-    """Enfileira uma nova impressao para o agente local."""
-    with conectar() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO print_job (numero, tipo, unidade, prioridade, data_hora, teste, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending')
-            """,
-            (numero, tipo, unidade, _normalizar_prioridade(prioridade), data_hora, 1 if teste else 0),
-        )
-        conn.commit()
-    return cursor.lastrowid
-
-
-def claim_next_print_job(stale_after_seconds: int = 120):
-    """Reserva o proximo job pendente para um agente."""
-    agora = datetime.now(FUSO_HORARIO)
-    stale_before = (agora - timedelta(seconds=stale_after_seconds)).isoformat()
-    claimed_at = agora.isoformat()
-
-    with conectar() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        conn.execute(
-            """
-            UPDATE print_job
-            SET status = 'pending',
-                claimed_at = NULL
-            WHERE status = 'processing'
-              AND claimed_at IS NOT NULL
-              AND claimed_at < ?
-            """,
-            (stale_before,),
-        )
-        row = conn.execute(
-            """
-            SELECT *
-            FROM print_job
-            WHERE status = 'pending'
-            ORDER BY id ASC
-            LIMIT 1
-            """
-        ).fetchone()
-        if not row:
-            conn.commit()
-            return None
-
-        conn.execute(
-            """
-            UPDATE print_job
-            SET status = 'processing',
-                claimed_at = ?,
-                last_error = NULL
-            WHERE id = ?
-            """,
-            (claimed_at, row["id"]),
-        )
-        conn.commit()
-
-    return obter_print_job(row["id"])
-
-
-def obter_print_job(identificador: int):
-    """Retorna um print job especifico."""
-    with conectar() as conn:
-        row = conn.execute("SELECT * FROM print_job WHERE id = ?", (identificador,)).fetchone()
-    return dict(row) if row else None
-
-
-def concluir_print_job(identificador: int, printer_info: str | None = None) -> None:
-    """Marca job como concluido."""
-    with conectar() as conn:
-        conn.execute(
-            """
-            UPDATE print_job
-            SET status = 'completed',
-                completed_at = ?,
-                printer_info = ?,
-                last_error = NULL
-            WHERE id = ?
-            """,
-            (datetime.now(FUSO_HORARIO).isoformat(), printer_info, identificador),
-        )
-        conn.commit()
-
-
-def falhar_print_job(identificador: int, erro: str) -> None:
-    """Marca job como erro para diagnostico."""
-    with conectar() as conn:
-        conn.execute(
-            """
-            UPDATE print_job
-            SET status = 'error',
-                completed_at = ?,
-                last_error = ?
-            WHERE id = ?
-            """,
-            (datetime.now(FUSO_HORARIO).isoformat(), erro[:500], identificador),
-        )
-        conn.commit()
 
 
 def definir_origem_padrao(origem: str) -> None:

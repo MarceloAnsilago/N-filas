@@ -46,22 +46,12 @@
     .notice strong { font-size: .95rem; }
     .notice p { margin: 4px 0 0; font-size: .88rem; line-height: 1.5; color: var(--muted); }
     .notice-screen { display: none; }
-    .print-status { padding: 14px 16px; border: 1px solid #dce7df; border-radius: 12px; color: #486255; background: #f8faf8; text-align: center; font-size: .88rem; line-height: 1.5; overflow-wrap: anywhere; }
-    .print-status.error { background: #fff3f1; border-color: #f0ccc6; color: #9b352a; }
-    .print-status.success { background: #edf8f0; border-color: #c3e3cd; color: #24673e; }
-    .quick-actions { display: flex; justify-content: center; }
-    :fullscreen .quick-actions { display: none; }
-    .quick-actions button { min-height: 44px; padding: 10px 20px; border: 1px solid #64748b; border-radius: 12px; background: #1e2d42; color: #f1f5f9; font-size: .85rem; font-weight: 600; cursor: pointer; }
-    .quick-actions button:hover { background: #334155; }
-    [aria-disabled="true"], button:disabled { opacity: .55; cursor: wait; }
-    .print-overlay[hidden] { display: none; }
-    .print-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: #0b1220f5; touch-action: none; overscroll-behavior: contain; text-align: center; }
-    .print-feedback { width: 100%; max-width: 520px; }
-    .print-spinner { width: 96px; height: 96px; margin: 0 auto 32px; border: 8px solid #334155; border-top-color: #60a5fa; border-radius: 50%; animation: print-spin 1s linear infinite; }
-    .print-feedback h2 { font-size: clamp(1.8rem, 6vw, 2.8rem); margin: 0 0 16px; }
-    .print-feedback p { color: var(--muted); font-size: 1.2rem; line-height: 1.6; }
-    @keyframes print-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) { .print-spinner { animation: none; } }
+    .ticket-status { padding: 14px 16px; border: 1px solid #dce7df; border-radius: 12px; color: #486255; background: #f8faf8; text-align: center; font-size: .88rem; line-height: 1.5; overflow-wrap: anywhere; }
+    .ticket-status.error { background: #fff3f1; border-color: #f0ccc6; color: #9b352a; }
+    .ticket-status.success { background: #edf8f0; border-color: #c3e3cd; color: #24673e; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .ticket-status:empty { display: none; }
+    .ticket-status.success { font-size: clamp(1.25rem, 5vw, 2rem); font-weight: 700; }
     .thanks { text-align: center; font-size: .8rem; color: var(--muted); }
     .wake-lock-notice { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.5; text-align: center; }
     .wake-lock-notice button { color: inherit; background: transparent; border: 1px solid #64748b; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
@@ -170,7 +160,7 @@
       </header>
 
       <section class="cards" aria-label="Tipos de atendimento">
-        <button type="button" class="card normal" data-print-url="{{ url_for('web.imprimir_senha', prioridade='normal') }}" aria-label="Senha normal">
+        <button type="button" class="card normal" data-issue-url="{{ url_for('web.emitir_senha', prioridade='normal') }}" aria-label="Senha normal">
           <div class="card-body">
             <div class="icon-shell" aria-hidden="true">
               <svg viewBox="0 0 24 24">
@@ -191,7 +181,7 @@
           </div>
         </button>
 
-        <button type="button" class="card preferencial" data-print-url="{{ url_for('web.imprimir_senha', prioridade='preferencial') }}" aria-label="Senha preferencial">
+        <button type="button" class="card preferencial" data-issue-url="{{ url_for('web.emitir_senha', prioridade='preferencial') }}" aria-label="Senha preferencial">
           <div class="card-body">
             <div class="icon-shell" aria-hidden="true">
               <svg viewBox="0 0 24 24">
@@ -237,43 +227,22 @@
         </div>
       </section>
 
-      <div class="print-status{% if not printer_ok %} error{% endif %}" id="print-status" role="status" aria-live="polite" aria-atomic="true">
-        {% if printer_ok %}
-          Toque em uma opcao para emitir e imprimir a senha na termica.
-        {% else %}
-          {{ printer_message }}
-        {% endif %}
-      </div>
+      <div class="ticket-status" id="ticket-status" role="status" aria-live="polite" aria-atomic="true"></div>
 
       <p class="wake-lock-notice" id="wake-lock-notice" role="status" hidden>
         <span id="wake-lock-message"></span>
         <button type="button" id="wake-lock-activate" hidden>Manter tela ativa</button>
       </p>
 
-      <div class="quick-actions">
-        <button type="button" id="btn-print-test" data-print-url="{{ url_for('web.imprimir_teste') }}">
-          Imprimir teste
-        </button>
-      </div>
-
       <div class="thanks">Obrigado pela sua presença!</div>
     </section>
   </main>
-  <div class="print-overlay" id="print-overlay" hidden role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
-    <div class="print-feedback">
-      <div class="print-spinner" aria-hidden="true"></div>
-      <h2>Enviando sua senha para a impressora</h2>
-      <p>Aguarde um instante.<br>Não é necessário tocar novamente.</p>
-    </div>
-  </div>
   <script src="{{ url_for('static', filename='js/senhas-wake-lock.js') }}" defer></script>
   <script>
     (function () {
       const root = document.documentElement;
-      const statusEl = document.getElementById("print-status");
-      const printTargets = document.querySelectorAll("[data-print-url]");
-      const overlay = document.getElementById("print-overlay");
-      const screen = document.querySelector("main.screen");
+      const statusEl = document.getElementById("ticket-status");
+      const issueButtons = document.querySelectorAll("[data-issue-url]");
       const fullscreenButton = document.getElementById("btn-fullscreen");
       const updateClock = () => {
         const now = new Date();
@@ -285,7 +254,7 @@
       };
       updateClock();
       setInterval(updateClock, 30000);
-      let isPrinting = false;
+      let isIssuing = false;
       const setStatus = (message, tone) => {
         if (!statusEl) {
           return;
@@ -298,53 +267,23 @@
         }
       };
 
-      const sendPrint = async (url) => {
-        if (isPrinting) {
-          return;
-        }
-        isPrinting = true;
-        const previousFocus = document.activeElement;
-        const minimumFeedback = new Promise((resolve) => setTimeout(resolve, 2000));
-        overlay.hidden = false;
-        screen.inert = true;
-        screen.setAttribute("aria-busy", "true");
-        overlay.focus({ preventScroll: true });
-        printTargets.forEach((element) => {
-          element.style.pointerEvents = "none";
-          element.setAttribute("aria-disabled", "true");
-          if (element.tagName === "BUTTON") {
-            element.disabled = true;
-          }
-        });
-        setStatus("Enviando para a impressora...", null);
+      const issueTicket = async (url) => {
+        if (isIssuing) return;
+        isIssuing = true;
+        issueButtons.forEach((button) => { button.disabled = true; });
+        setStatus("Emitindo sua senha…", null);
         try {
-          const response = await fetch(url, {
-            method: "POST",
-            headers: { "X-Requested-With": "fetch" }
-          });
-          const payload = await response.json();
+          const response = await fetch(url, { method: "POST" });
+          const payload = await response.json().catch(() => ({}));
           if (!response.ok || !payload.ok) {
-            throw new Error(payload.message || "Falha ao imprimir.");
+            throw new Error(payload.message || "Falha ao emitir a senha.");
           }
-          setStatus(payload.message || "Senha enviada para impressora.", "success");
+          setStatus(payload.message + " Aguarde a chamada.", "success");
         } catch (error) {
-          setStatus(error.message || "Falha ao enviar a impressao.", "error");
+          setStatus(error.message || "Falha ao emitir a senha.", "error");
         } finally {
-          await minimumFeedback;
-          overlay.hidden = true;
-          screen.inert = false;
-          screen.removeAttribute("aria-busy");
-          isPrinting = false;
-          printTargets.forEach((element) => {
-            element.style.pointerEvents = "";
-            element.removeAttribute("aria-disabled");
-            if (element.tagName === "BUTTON") {
-              element.disabled = false;
-            }
-          });
-          if (previousFocus && previousFocus.isConnected) {
-            previousFocus.focus({ preventScroll: true });
-          }
+          isIssuing = false;
+          issueButtons.forEach((button) => { button.disabled = false; });
         }
       };
 
@@ -362,9 +301,6 @@
 
         try {
           await root.requestFullscreen();
-          if (!silent) {
-            setStatus("Tela cheia ativada.", "success");
-          }
           return true;
         } catch (error) {
           if (!silent) {
@@ -381,14 +317,8 @@
         });
       }
 
-      printTargets.forEach((element) => {
-        element.addEventListener("click", (event) => {
-          event.preventDefault();
-          if (isPrinting) {
-            return;
-          }
-          sendPrint(element.dataset.printUrl);
-        });
+      issueButtons.forEach((button) => {
+        button.addEventListener("click", () => issueTicket(button.dataset.issueUrl));
       });
     })();
   </script>

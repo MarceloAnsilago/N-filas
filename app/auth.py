@@ -2,7 +2,6 @@
 from contextlib import contextmanager
 from pathlib import Path
 import hmac
-import os
 import secrets
 import sqlite3
 from threading import Lock
@@ -49,14 +48,26 @@ def init_auth(app):
         except FileExistsError:
             pass
         app.secret_key = secret_path.read_text(encoding="ascii").strip()
-    with accounts() as conn:
-        conn.execute("""CREATE TABLE IF NOT EXISTS unidade_login (
+    schema = """
+        CREATE TABLE IF NOT EXISTS unidade_login (
             id INTEGER PRIMARY KEY, nome TEXT NOT NULL, login TEXT NOT NULL UNIQUE,
             senha_hash TEXT NOT NULL, legacy INTEGER NOT NULL DEFAULT 0,
-            print_token TEXT NOT NULL UNIQUE)""")
+            is_admin INTEGER NOT NULL DEFAULT 0)
+    """
+    with accounts() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(schema)
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(unidade_login)")}
         if "is_admin" not in columns:
             conn.execute("ALTER TABLE unidade_login ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+        if "print_token" in columns:
+            conn.execute("ALTER TABLE unidade_login RENAME TO unidade_login_anterior")
+            conn.execute(schema)
+            conn.execute("""
+                INSERT INTO unidade_login (id, nome, login, senha_hash, legacy, is_admin)
+                SELECT id, nome, login, senha_hash, legacy, is_admin FROM unidade_login_anterior
+            """)
+            conn.execute("DROP TABLE unidade_login_anterior")
     app.extensions["unidades_lock"] = Lock()
     app.extensions["unidades_events"] = {}
     app.register_blueprint(bp)
@@ -73,17 +84,6 @@ def private_response(response):
 
 def require_unit():
     if request.endpoint in {"auth.login", "auth.admin_login", "static"} or request.endpoint is None:
-        return None
-    if request.path.startswith("/print-agent/"):
-        token = (request.headers.get("X-Print-Agent-Token") or "").strip()
-        if not token and request.authorization:
-            token = (request.authorization.token if request.authorization.type.lower() == "bearer"
-                     else request.authorization.password or request.authorization.username or "")
-        with accounts() as conn:
-            unit = conn.execute("SELECT * FROM unidade_login WHERE print_token = ?", (token,)).fetchone() if token else None
-        if unit is None:
-            return jsonify(ok=False, message="Token da unidade invalido."), 401
-        select_unit(unit)
         return None
     with accounts() as conn:
         unit = conn.execute("SELECT * FROM unidade_login WHERE id = ?", (session.get("unidade_id"),)).fetchone()
@@ -137,7 +137,7 @@ def login_page(admin_only):
                 # Somente rotas locais conhecidas podem ser destino do login.
                 if admin_only:
                     return redirect(url_for("web.admin"))
-                allowed = {"/", "/chamar", "/painel", "/painel/compacto", "/gerar", "/senhas", "/historico", "/imprimir"}
+                allowed = {"/", "/chamar", "/painel", "/painel/compacto", "/gerar", "/senhas", "/historico"}
                 return redirect(target if target.split("?", 1)[0] in allowed else url_for("web.admin" if unit["is_admin"] else "web.chamar"))
             flash("Login ou senha incorretos.", "warning")
     unidades = []
@@ -163,10 +163,9 @@ def admin_page():
                 with accounts() as conn:
                     conn.execute("BEGIN IMMEDIATE")
                     first = conn.execute("SELECT 1 FROM unidade_login WHERE is_admin = 0 LIMIT 1").fetchone() is None
-                    token = (os.getenv("PRINT_AGENT_TOKEN") or "").strip() if first else ""
                     cursor = conn.execute(
-                        "INSERT INTO unidade_login (nome, login, senha_hash, legacy, print_token) VALUES (?, ?, ?, ?, ?)",
-                        (nome, username, generate_password_hash(password), int(first), token or secrets.token_urlsafe(32)),
+                        "INSERT INTO unidade_login (nome, login, senha_hash, legacy) VALUES (?, ?, ?, ?)",
+                        (nome, username, generate_password_hash(password), int(first)),
                     )
                     unit = conn.execute("SELECT * FROM unidade_login WHERE id = ?", (cursor.lastrowid,)).fetchone()
                 administrator = dict(g.unidade)
@@ -181,7 +180,7 @@ def admin_page():
             except sqlite3.IntegrityError:
                 flash("Este login ja esta em uso. Escolha outro.", "warning")
     with accounts() as conn:
-        unidades = [dict(row) for row in conn.execute("SELECT id, nome, login, print_token FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
+        unidades = [dict(row) for row in conn.execute("SELECT id, nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
     return render_template("admin.html", unidades=unidades, form_token=form_token())
 
 

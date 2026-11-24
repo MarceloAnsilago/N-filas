@@ -147,12 +147,6 @@
                       Excluir sessão
                     </button>
                   </form>
-                  <a
-                    href="{{ url_for('web.imprimir', data=sessao.data) if sessao.data else url_for('web.imprimir') }}"
-                    class="btn btn-sm btn-outline-primary"
-                  >
-                    Ir para impressão
-                  </a>
                 </div>
                 <small class="text-muted">faixa {{ sessao.menor or 0 }} - {{ sessao.maior or 0 }}</small>
               </div>
