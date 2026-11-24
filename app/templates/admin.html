@@ -12,6 +12,10 @@
     h1 { margin: 8px 0 0; font-size: clamp(1.6rem, 4vw, 2.2rem); }
     main { max-width: 1148px; margin: 0 auto; padding: 32px 24px; }
     .intro { color: #526078; margin: 0 0 24px; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; border-bottom: 1px solid #dce3ef; }
+    .tabs a { padding: 10px 14px; color: #526078; text-decoration: none; border-bottom: 3px solid transparent; }
+    .tabs a:hover, .tabs a[aria-current="page"] { color: #2563eb; }
+    .tabs a[aria-current="page"] { border-bottom-color: #2563eb; font-weight: 600; }
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px; }
     .card { display: block; background: #fff; border: 1px solid #dce3ef; border-radius: 16px; padding: 24px; text-decoration: none; color: inherit; transition: border-color .2s, box-shadow .2s; }
     .card:hover { border-color: #2563eb; box-shadow: 0 8px 24px #17203312; }
@@ -32,7 +36,7 @@
     <h1>Administração</h1>
   </header>
   <main>
-    <p class="intro">Cadastre as unidades e defina os logins de acesso.</p>
+    {% set personalizar = request.args.get('aba') == 'personalizar-painel' %}
     <form method="post" action="{{ url_for('auth.logout') }}">
       <input type="hidden" name="form_token" value="{{ auth_form_token() }}">
       <button type="submit">Sair</button>
@@ -40,6 +44,16 @@
     {% for category, message in get_flashed_messages(with_categories=true) %}
     <p class="notice" role="alert">{{ message }}</p>
     {% endfor %}
+    <nav class="tabs" aria-label="Seções da administração">
+      <a href="{{ url_for('web.admin') }}"{% if not personalizar %} aria-current="page"{% endif %}>Unidades</a>
+      <a href="{{ url_for('web.admin', aba='personalizar-painel') }}"{% if personalizar %} aria-current="page"{% endif %}>Personalizar painel</a>
+    </nav>
+    {% if personalizar %}
+    <section class="card" aria-labelledby="personalizar-painel-titulo">
+      <h2 id="personalizar-painel-titulo">Personalizar painel</h2>
+    </section>
+    {% else %}
+    <p class="intro">Cadastre as unidades e defina os logins de acesso.</p>
     <section class="card" style="margin: 24px 0;">
       <h2>Cadastrar unidade</h2>
       <form method="post" action="{{ url_for('web.admin') }}">
@@ -76,6 +90,7 @@
       </a>
       {% endfor %}
     </nav>
+    {% endif %}
   </main>
 </body>
 </html>
