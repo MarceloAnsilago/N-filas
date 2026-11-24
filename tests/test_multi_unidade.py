@@ -1,7 +1,9 @@
+from io import BytesIO
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 import unittest
+from PIL import Image
 
 from app import create_app, db, painel_cores
 from app.auth import accounts
@@ -117,6 +119,37 @@ class MultiUnidadeTests(unittest.TestCase):
         self.assertIn("--painel-fundo: #112233;", self.a.get("/painel").get_data(as_text=True))
         self.administrator.post(route, data={**form, "acao": "restaurar_cores"})
         self.assertNotIn("--painel-fundo:", self.a.get("/painel").get_data(as_text=True))
+
+    def test_panel_logo_is_replaced_and_restored_per_unit(self):
+        self.register(self.a, "Unidade Norte", "norte")
+        self.register(self.b, "Unidade Sul", "sul")
+        route = "/admin?unidade_painel=2&aba=logo"
+        logo_url = "/painel/logo/2"
+        token = self.token(self.administrator, route)
+        image = BytesIO()
+        Image.new("RGB", (8, 4), "red").save(image, "JPEG")
+        image.seek(0)
+        response = self.administrator.post(route, data={
+            "acao": "salvar_logo", "form_token": token, "logo": (image, "logo.jpg"),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(logo_url, self.administrator.get(route).get_data(as_text=True))
+        panel = self.a.get("/painel").get_data(as_text=True)
+        self.assertIn(logo_url, panel)
+        self.assertNotIn("<strong>IDARON</strong>", panel)
+        self.assertIn("Seja bem-vindo!", panel)
+        self.assertIn("<strong>IDARON</strong>", self.b.get("/painel").get_data(as_text=True))
+        self.assertEqual(self.b.get(logo_url).status_code, 404)
+        logo = self.a.get(logo_url)
+        self.assertEqual(logo.mimetype, "image/png")
+        self.assertEqual(Image.open(BytesIO(logo.data)).size, (8, 4))
+        self.administrator.post(route, data={
+            "acao": "salvar_logo", "form_token": token, "logo": (BytesIO(b"<svg/>"), "logo.png"),
+        })
+        self.assertEqual(self.a.get(logo_url).data, logo.data)
+        self.administrator.post(route, data={"acao": "remover_logo", "form_token": token})
+        self.assertEqual(self.a.get(logo_url).status_code, 404)
+        self.assertIn("<strong>IDARON</strong>", self.a.get("/painel").get_data(as_text=True))
 
     def test_routes_require_login_and_credentials_are_hashed(self):
         for route in ("/", "/admin", "/chamar", "/painel", "/senhas", "/gerar", "/historico"):

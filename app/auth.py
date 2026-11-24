@@ -6,10 +6,11 @@ import secrets
 import sqlite3
 from threading import Lock
 
-from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db, painel_cores
+from . import db, painel_cores, painel_logo
 from .painel_events import PainelEvents
 
 bp = Blueprint("auth", __name__)
@@ -74,6 +75,11 @@ def init_auth(app):
                 PRIMARY KEY (unidade_id, item)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS painel_logo (
+                unidade_id INTEGER PRIMARY KEY, imagem BLOB NOT NULL
+            )
+        """)
     app.extensions["unidades_lock"] = Lock()
     app.extensions["unidades_events"] = {}
     app.register_blueprint(bp)
@@ -101,7 +107,7 @@ def require_unit():
     select_unit(unit)
     if request.endpoint == "web.admin" and not unit["is_admin"]:
         return redirect(url_for("auth.admin_login"))
-    if unit["is_admin"] and request.endpoint not in {"web.admin", "auth.logout"}:
+    if unit["is_admin"] and request.endpoint not in {"web.admin", "auth.logo_painel", "auth.logout"}:
         if request.path.endswith(("/status", "/events")) or request.method != "GET":
             return jsonify(ok=False, message="Entre com o login da unidade."), 401
         return redirect(url_for("auth.login", next=request.path))
@@ -157,6 +163,7 @@ def login_page(admin_only):
 
 def admin_page():
     unidade_painel = request.args.get("unidade_painel", type=int)
+    aba = "logo" if request.args.get("aba") == "logo" else None
     with accounts() as conn:
         if "unidade_painel" in request.args:
             unidade = conn.execute(
@@ -165,7 +172,16 @@ def admin_page():
             if unidade is None:
                 abort(404)
         if request.method == "POST" and unidade_painel is not None:
-            acao = request.form.get("acao")
+            destino = url_for("web.admin", unidade_painel=unidade_painel, aba=aba, _anchor=f"unidade-{unidade_painel}")
+            if aba == "logo":
+                request.max_content_length = painel_logo.MAX_ARQUIVO + 64 * 1024
+            try:
+                acao = request.form.get("acao")
+            except RequestEntityTooLarge:
+                if aba != "logo":
+                    raise
+                flash("A imagem deve ter no máximo 5 MB.", "warning")
+                return redirect(destino)
             if not valid_form():
                 flash("Atualize a página e tente novamente.", "warning")
             elif acao in {"salvar_cores", "restaurar_cores"}:
@@ -175,9 +191,21 @@ def admin_page():
                 else:
                     painel_cores.gravar_cores(conn, unidade_painel, cores)
                     flash("Cores do painel atualizadas.", "success")
+            elif aba == "logo" and acao == "salvar_logo":
+                try:
+                    imagem = painel_logo.preparar_logo(request.files.get("logo"))
+                except ValueError as erro:
+                    flash(str(erro), "warning")
+                else:
+                    conn.execute("INSERT OR REPLACE INTO painel_logo (unidade_id, imagem) VALUES (?, ?)",
+                                 (unidade_painel, imagem))
+                    flash("Logo do painel atualizado.", "success")
+            elif aba == "logo" and acao == "remover_logo":
+                conn.execute("DELETE FROM painel_logo WHERE unidade_id = ?", (unidade_painel,))
+                flash("Logo padrão restaurado.", "success")
             else:
                 abort(400)
-            return redirect(url_for("web.admin", unidade_painel=unidade_painel, _anchor=f"unidade-{unidade_painel}"))
+            return redirect(destino)
 
     if request.method == "POST":
         nome = (request.form.get("nome") or "").strip()
@@ -212,7 +240,27 @@ def admin_page():
         unidades = [dict(row) for row in conn.execute("SELECT id, nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
         cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None else {}
     return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel,
-                           itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token())
+                           itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token(),
+                           logo_url=url_logo_painel(unidade_painel) if aba == "logo" else None)
+
+
+def url_logo_painel(unidade_id):
+    if unidade_id is not None:
+        with accounts() as conn:
+            logo = conn.execute("SELECT 1 FROM painel_logo WHERE unidade_id = ?", (unidade_id,)).fetchone()
+        if logo:
+            return url_for("auth.logo_painel", unidade_id=unidade_id)
+
+
+@bp.get("/painel/logo/<int:unidade_id>")
+def logo_painel(unidade_id):
+    if not g.unidade["is_admin"] and g.unidade["id"] != unidade_id:
+        abort(404)
+    with accounts() as conn:
+        logo = conn.execute("SELECT imagem FROM painel_logo WHERE unidade_id = ?", (unidade_id,)).fetchone()
+    if logo is None:
+        abort(404)
+    return Response(logo["imagem"], mimetype="image/png", headers={"X-Content-Type-Options": "nosniff"})
 
 
 def cores_painel_da_unidade():

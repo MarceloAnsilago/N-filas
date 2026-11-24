@@ -19,6 +19,7 @@
     .panel-tabs a:hover, .panel-tabs a[aria-current="page"] { color: #2563eb; }
     .panel-tabs a[aria-current="page"] { border-bottom-color: #2563eb; font-weight: 600; }
     .logo-section { padding-top: 16px; }
+    .logo-preview { display: block; width: min(100%, 330px); height: 92px; object-fit: contain; object-position: left center; background: #052343; border-radius: 8px; padding: 8px; }
     .color-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; margin: 16px 0; }
     .color-grid label { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px; border: 1px solid #dce3ef; border-radius: 8px; font-size: .9rem; }
     .color-grid input[type="color"] { flex: 0 0 44px; width: 44px; height: 36px; padding: 3px; cursor: pointer; }
@@ -49,9 +50,12 @@
       <input type="hidden" name="form_token" value="{{ auth_form_token() }}">
       <button type="submit">Sair</button>
     </form>
-    {% for category, message in get_flashed_messages(with_categories=true) %}
+    {% set mensagens = get_flashed_messages() %}
+    {% if unidade_painel is none %}
+    {% for message in mensagens %}
     <p class="notice" role="alert">{{ message }}</p>
     {% endfor %}
+    {% endif %}
     <section class="card" style="margin: 24px 0;">
       <h2>Cadastrar unidade</h2>
       <form method="post" action="{{ url_for('web.admin') }}">
@@ -78,10 +82,27 @@
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if not logo_ativo %} aria-current="page"{% endif %}>Cores</a>
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if logo_ativo %} aria-current="page"{% endif %}>Logo</a>
           </nav>
+          {% for message in mensagens %}
+          <p class="notice" role="alert">{{ message }}</p>
+          {% endfor %}
           {% if logo_ativo %}
           <div class="logo-section">
-            <p>O envio de logo ainda não está disponível.</p>
-            <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+            {% if logo_url %}
+            <img class="logo-preview" src="{{ logo_url }}" alt="Logo atual de {{ unidade.nome }}">
+            {% else %}
+            <p>O painel usa o logo padrão.</p>
+            {% endif %}
+            <form method="post" enctype="multipart/form-data" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo') }}">
+              <input type="hidden" name="form_token" value="{{ form_token }}">
+              <label for="logo-{{ unidade.id }}">Imagem para o cabeçalho</label>
+              <input id="logo-{{ unidade.id }}" name="logo" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="logo-formatos">
+              <p id="logo-formatos">PNG, JPEG ou WebP. Até 5 MB. Para aproveitar o espaço do cabeçalho, use uma imagem horizontal.</p>
+              <div class="color-actions">
+                <button class="primary" type="submit" name="acao" value="salvar_logo">Salvar logo</button>
+                {% if logo_url %}<button type="submit" name="acao" value="remover_logo">Restaurar logo padrão</button>{% endif %}
+                <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+              </div>
+            </form>
           </div>
           {% else %}
           <form method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id) }}">

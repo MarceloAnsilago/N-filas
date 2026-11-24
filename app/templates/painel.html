@@ -10,8 +10,12 @@
 <body>
   <div class="display-shell">
     <header class="institution">
+      {% if logo_url %}
+      <img src="{{ logo_url }}" alt="{{ unidade_conectada.nome }}" class="institution-custom-logo">
+      {% else %}
       <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="institution-logo">
       <div><strong>IDARON</strong><span>ULSAV SÃO MIGUEL DO GUAPORÉ</span></div>
+      {% endif %}
       <div class="institution-motto">Seja bem-vindo!<br>Retire sua senha e aguarde o atendimento.</div>
     </header>
     <section class="clock-block" aria-label="Data e hora">

@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 from flask import Blueprint, flash, redirect, render_template, request, url_for, session, jsonify, Response, current_app, g
 
 from . import db
-from .auth import cores_painel_da_unidade
+from .auth import cores_painel_da_unidade, url_logo_painel
 
 logger = logging.getLogger(__name__)
 
@@ -458,7 +458,9 @@ def painel_compacto():
 
 @bp.route("/painel")
 def painel():
-    return render_template("painel.html", video_embed=_montar_video_embed(), cores=cores_painel_da_unidade())
+    unidade = g.get("unidade")
+    return render_template("painel.html", video_embed=_montar_video_embed(), cores=cores_painel_da_unidade(),
+                           logo_url=url_logo_painel(unidade["id"]) if unidade else None)
 
 
 @bp.route("/senhas")

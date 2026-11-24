@@ -4,6 +4,7 @@ body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #020f2
 .display-shell { min-height: 100dvh; padding: 12px; display: grid; grid-template-columns: minmax(0, 2.7fr) minmax(280px, 1fr); grid-template-rows: 98px minmax(0, 1fr) 116px 42px; gap: 0 14px; background: var(--painel-fundo, radial-gradient(ellipse at 100% 100%, #006a4255, transparent 30%), radial-gradient(ellipse at 5% 0%, #0a65a066, transparent 60%), #032241); }
 .institution { display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--painel-cabecalho, linear-gradient(110deg, #052343, #0b417a)); overflow: hidden; }
 .institution-logo { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 50%; padding: 4px; }
+.institution-custom-logo { display: block; width: auto; max-width: min(330px, 100%); height: clamp(38px, 7vw, 76px); object-fit: contain; object-position: left center; }
 .institution strong { display: block; font-size: clamp(26px, 3.1vw, 46px); letter-spacing: -1.5px; line-height: 1; }
 .institution span { display: block; font-weight: 600; font-size: clamp(9px, 1vw, 14px); margin-top: 5px; }
 .institution-motto { border-left: 2px solid #b3d5f3; padding: 0 0 0 28px; margin-left: 20px; font: italic 23px/1.1 'Segoe Print', cursive; transform: rotate(-5deg); }
