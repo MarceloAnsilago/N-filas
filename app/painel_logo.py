@@ -7,6 +7,17 @@ from PIL import Image, ImageOps
 MAX_ARQUIVO = 5 * 1024 * 1024
 
 
+def ler_ajuste(form):
+    try:
+        largura = int(form.get("logo_largura", 100))
+        altura = int(form.get("logo_altura", 100))
+    except ValueError as erro:
+        raise ValueError("Use valores entre 10% e 100% para largura e altura.") from erro
+    if not (10 <= largura <= 100 and 10 <= altura <= 100):
+        raise ValueError("Use valores entre 10% e 100% para largura e altura.")
+    return largura, altura, int(form.get("logo_esticar") == "1")
+
+
 def preparar_logo(arquivo):
     if not arquivo or not arquivo.filename:
         raise ValueError("Escolha uma imagem PNG, JPEG ou WebP.")

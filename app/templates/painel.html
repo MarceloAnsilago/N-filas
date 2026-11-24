@@ -11,8 +11,11 @@
   <div class="display-shell">
     <header class="institution">
       <div class="institution-brand">
-        {% if logo_url %}
-        <img src="{{ logo_url }}" alt="{{ unidade_conectada.nome }}" class="institution-custom-logo">
+        {% if logo %}
+        <div class="institution-logo-space">
+          <img src="{{ logo.url }}" alt="{{ unidade_conectada.nome }}" class="institution-custom-logo"
+               style="width: {{ logo.largura }}%; height: {{ logo.altura }}%; object-fit: {{ 'fill' if logo.esticar else 'contain' }};">
+        </div>
         {% else %}
         <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="institution-logo">
         <div><strong>IDARON</strong><span>ULSAV SÃO MIGUEL DO GUAPORÉ</span></div>

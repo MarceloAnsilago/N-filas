@@ -5,7 +5,8 @@ body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #020f2
 .institution { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 12px; background: var(--painel-cabecalho, linear-gradient(110deg, #052343, #0b417a)); }
 .institution-brand { display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; padding: 0 8px; }
 .institution-logo { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 50%; padding: 4px; }
-.institution-custom-logo { display: block; width: auto; max-width: 100%; height: clamp(38px, 7vw, 76px); object-fit: contain; }
+.institution-logo-space { display: flex; align-items: center; justify-content: center; width: 100%; height: clamp(38px, 7vw, 76px); }
+.institution-custom-logo { display: block; }
 .institution strong { display: block; font-size: clamp(26px, 3.1vw, 46px); letter-spacing: -1.5px; line-height: 1; }
 .institution span { display: block; font-weight: 600; font-size: clamp(9px, 1vw, 14px); margin-top: 5px; }
 .institution-motto { display: grid; place-content: center; border-left: 2px solid #b3d5f3; padding: 0 10px; text-align: center; font: italic clamp(15px, 1.5vw, 23px)/1.2 'Segoe Print', cursive; }

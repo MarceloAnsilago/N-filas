@@ -143,6 +143,13 @@ class MultiUnidadeTests(unittest.TestCase):
         logo = self.a.get(logo_url)
         self.assertEqual(logo.mimetype, "image/png")
         self.assertEqual(Image.open(BytesIO(logo.data)).size, (8, 4))
+        ajuste = {"acao": "salvar_logo", "form_token": token, "logo_largura": "65", "logo_altura": "80", "logo_esticar": "1"}
+        self.assertEqual(self.administrator.post(route, data=ajuste).status_code, 302)
+        estilo = "width: 65%; height: 80%; object-fit: fill;"
+        self.assertIn(estilo, self.a.get("/painel").get_data(as_text=True))
+        self.assertIn(estilo, self.administrator.get(route).get_data(as_text=True))
+        self.administrator.post(route, data={**ajuste, "logo_largura": "101"})
+        self.assertIn(estilo, self.a.get("/painel").get_data(as_text=True))
         self.administrator.post(route, data={
             "acao": "salvar_logo", "form_token": token, "logo": (BytesIO(b"<svg/>"), "logo.png"),
         })

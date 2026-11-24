@@ -80,6 +80,10 @@ def init_auth(app):
                 unidade_id INTEGER PRIMARY KEY, imagem BLOB NOT NULL
             )
         """)
+        colunas_logo = {row["name"] for row in conn.execute("PRAGMA table_info(painel_logo)")}
+        for coluna, padrao in (("largura", 100), ("altura", 100), ("esticar", 0)):
+            if coluna not in colunas_logo:
+                conn.execute(f"ALTER TABLE painel_logo ADD COLUMN {coluna} INTEGER NOT NULL DEFAULT {padrao}")
     app.extensions["unidades_lock"] = Lock()
     app.extensions["unidades_events"] = {}
     app.register_blueprint(bp)
@@ -193,12 +197,24 @@ def admin_page():
                     flash("Cores do painel atualizadas.", "success")
             elif aba == "logo" and acao == "salvar_logo":
                 try:
-                    imagem = painel_logo.preparar_logo(request.files.get("logo"))
+                    ajuste = painel_logo.ler_ajuste(request.form)
+                    arquivo = request.files.get("logo")
+                    if arquivo:
+                        imagem = painel_logo.preparar_logo(arquivo)
+                        conn.execute(
+                            "INSERT OR REPLACE INTO painel_logo (unidade_id, imagem, largura, altura, esticar) VALUES (?, ?, ?, ?, ?)",
+                            (unidade_painel, imagem, *ajuste),
+                        )
+                    else:
+                        atualizado = conn.execute(
+                            "UPDATE painel_logo SET largura = ?, altura = ?, esticar = ? WHERE unidade_id = ?",
+                            (*ajuste, unidade_painel),
+                        )
+                        if not atualizado.rowcount:
+                            raise ValueError("Escolha uma imagem PNG, JPEG ou WebP.")
                 except ValueError as erro:
                     flash(str(erro), "warning")
                 else:
-                    conn.execute("INSERT OR REPLACE INTO painel_logo (unidade_id, imagem) VALUES (?, ?)",
-                                 (unidade_painel, imagem))
                     flash("Logo do painel atualizado.", "success")
             elif aba == "logo" and acao == "remover_logo":
                 conn.execute("DELETE FROM painel_logo WHERE unidade_id = ?", (unidade_painel,))
@@ -241,15 +257,17 @@ def admin_page():
         cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None else {}
     return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel,
                            itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token(),
-                           logo_url=url_logo_painel(unidade_painel) if aba == "logo" else None)
+                           logo=obter_logo_painel(unidade_painel) if aba == "logo" else None)
 
 
-def url_logo_painel(unidade_id):
+def obter_logo_painel(unidade_id):
     if unidade_id is not None:
         with accounts() as conn:
-            logo = conn.execute("SELECT 1 FROM painel_logo WHERE unidade_id = ?", (unidade_id,)).fetchone()
+            logo = conn.execute(
+                "SELECT largura, altura, esticar FROM painel_logo WHERE unidade_id = ?", (unidade_id,)
+            ).fetchone()
         if logo:
-            return url_for("auth.logo_painel", unidade_id=unidade_id)
+            return dict(logo, url=url_for("auth.logo_painel", unidade_id=unidade_id))
 
 
 @bp.get("/painel/logo/<int:unidade_id>")
