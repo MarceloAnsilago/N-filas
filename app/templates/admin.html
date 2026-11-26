@@ -119,6 +119,14 @@
           </div>
           {% elif aba == 'link' %}
           <div style="padding-top: 16px;">
+            <form method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link') }}">
+              <input type="hidden" name="form_token" value="{{ form_token }}">
+              <label for="link-youtube-{{ unidade.id }}">Link do vídeo ou da playlist do YouTube</label>
+              <input id="link-youtube-{{ unidade.id }}" name="link_youtube" type="url" maxlength="2048"
+                     value="{{ link_youtube }}" placeholder="https://www.youtube.com/…" aria-describedby="link-youtube-ajuda">
+              <p id="link-youtube-ajuda">Para voltar à mídia padrão, apague o link e salve.</p>
+              <button class="primary" type="submit" name="acao" value="salvar_link">Salvar link</button>
+            </form>
             <p>Para abrir o painel desta unidade, entre com o login <strong>{{ unidade.login }}</strong>.</p>
             <div class="color-actions">
               <a class="open" href="{{ url_for('web.painel') }}">Abrir painel</a>

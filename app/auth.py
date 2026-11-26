@@ -10,7 +10,7 @@ from flask import Blueprint, Response, abort, current_app, flash, g, jsonify, re
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db, painel_cores, painel_logo
+from . import db, painel_cores, painel_logo, painel_youtube
 from .painel_events import PainelEvents
 
 bp = Blueprint("auth", __name__)
@@ -84,6 +84,11 @@ def init_auth(app):
         for coluna, padrao in (("largura", 100), ("altura", 100), ("esticar", 0)):
             if coluna not in colunas_logo:
                 conn.execute(f"ALTER TABLE painel_logo ADD COLUMN {coluna} INTEGER NOT NULL DEFAULT {padrao}")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS painel_youtube (
+                unidade_id INTEGER PRIMARY KEY, link TEXT NOT NULL
+            )
+        """)
     app.extensions["unidades_lock"] = Lock()
     app.extensions["unidades_events"] = {}
     app.register_blueprint(bp)
@@ -221,6 +226,19 @@ def admin_page():
             elif aba == "logo" and acao == "remover_logo":
                 conn.execute("DELETE FROM painel_logo WHERE unidade_id = ?", (unidade_painel,))
                 flash("Logo padrão restaurado.", "success")
+            elif aba == "link" and acao == "salvar_link":
+                link = request.form.get("link_youtube", "").strip()
+                if not link:
+                    conn.execute("DELETE FROM painel_youtube WHERE unidade_id = ?", (unidade_painel,))
+                    flash("Mídia padrão do painel restaurada.", "success")
+                elif len(link) > 2048 or not painel_youtube.origem_embed(link, muted=True):
+                    flash("Informe um link válido de vídeo ou playlist do YouTube.", "warning")
+                else:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO painel_youtube (unidade_id, link) VALUES (?, ?)",
+                        (unidade_painel, link),
+                    )
+                    flash("Link do painel salvo.", "success")
             else:
                 abort(400)
             return redirect(destino)
@@ -259,7 +277,16 @@ def admin_page():
         cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None else {}
     return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel, aba=aba,
                            itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token(),
-                           logo=obter_logo_painel(unidade_painel) if aba == "logo" else None)
+                           logo=obter_logo_painel(unidade_painel) if aba == "logo" else None,
+                           link_youtube=obter_link_painel(unidade_painel) if aba == "link" else "")
+
+
+def obter_link_painel(unidade_id):
+    with accounts() as conn:
+        row = conn.execute(
+            "SELECT link FROM painel_youtube WHERE unidade_id = ?", (unidade_id,)
+        ).fetchone()
+    return row["link"] if row else ""
 
 
 def obter_logo_painel(unidade_id):

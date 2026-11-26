@@ -6,8 +6,8 @@ from urllib.parse import parse_qs, urlparse
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for, session, jsonify, Response, current_app, g
 
-from . import db
-from .auth import cores_painel_da_unidade, obter_logo_painel
+from . import db, painel_youtube
+from .auth import cores_painel_da_unidade, obter_link_painel, obter_logo_painel
 
 logger = logging.getLogger(__name__)
 
@@ -459,7 +459,8 @@ def painel_compacto():
 @bp.route("/painel")
 def painel():
     unidade = g.get("unidade")
-    return render_template("painel.html", video_embed=_montar_video_embed(), cores=cores_painel_da_unidade(),
+    link = obter_link_painel(unidade["id"]) if unidade else ""
+    return render_template("painel.html", video_embed=_montar_video_embed(link), cores=cores_painel_da_unidade(),
                            logo=obter_logo_painel(unidade["id"]) if unidade else None)
 
 
@@ -581,7 +582,12 @@ def _resolver_playlist_id(valor: str | None) -> str:
     return alvo
 
 
-def _montar_video_embed() -> str:
+def _montar_video_embed(link_youtube: str = "") -> str:
+    yt_muted = os.getenv("PAINEL_YT_MUTED", "1") not in {"0", "false", "no", "off"}
+    origem_youtube = painel_youtube.origem_embed(link_youtube, yt_muted) if link_youtube else None
+    if origem_youtube:
+        return _iframe_youtube(origem_youtube)
+
     url = (os.getenv("PAINEL_VIDEO_URL") or "").strip()
     if url:
         lower = url.lower()
@@ -603,16 +609,21 @@ def _montar_video_embed() -> str:
         or os.getenv("PAINEL_YT_PLAYLIST_ID")
         or DEFAULT_PLAYLIST_ID
     )
-    yt_muted_flag = os.getenv("PAINEL_YT_MUTED", "1")
-    yt_muted = yt_muted_flag not in {"0", "false", "no", "off"}
     mute_param = "&mute=1" if yt_muted else "&mute=0"
+    return _iframe_youtube(
+        f"https://www.youtube-nocookie.com/embed/videoseries?list={playlist}&autoplay=1&loop=1&playsinline=1&rel=0&modestbranding=1{mute_param}"
+    )
+
+
+def _iframe_youtube(origem):
     return (
         '<iframe '
-        'src="https://www.youtube-nocookie.com/embed/videoseries?list={playlist}&autoplay=1&loop=1&playsinline=1&rel=0&modestbranding=1{mute}" '
+        'src="{origem}" '
         'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" '
+        'referrerpolicy="strict-origin-when-cross-origin" '
         'allowfullscreen '
         'style="width:100%;height:100%;border:0;background:#000;" '
-        'title="Painel - Playlist YouTube"></iframe>'
-    ).format(playlist=playlist, mute=mute_param)
+        'title="Painel - YouTube"></iframe>'
+    ).format(origem=origem)
 
 
