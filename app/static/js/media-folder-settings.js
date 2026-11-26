@@ -21,7 +21,17 @@
   const get = unit => access('readonly', store => store.get(unit));
   const isVideo = file =>
     file.type.startsWith('video/') || /\.(mp4|m4v|webm|ogv|mov|mkv|avi|mpeg|mpg)$/i.test(file.name);
-  window.painelFolderSettings = { get, isVideo };
+  async function getSettings(unit) {
+    const value = await get(unit);
+    return value?.source ? value : { source: value ? 'folder' : 'youtube', folder: value };
+  }
+  window.painelFolderSettings = {
+    async get(unit) {
+      const settings = await getSettings(unit);
+      return settings.source === 'folder' ? settings.folder : undefined;
+    },
+    isVideo,
+  };
 
   const section = document.getElementById('admin-media-folder');
   if (!section) return;
@@ -29,23 +39,45 @@
   const choose = document.getElementById('save-media-folder');
   const input = document.getElementById('admin-media-folder-input');
   const remove = document.getElementById('remove-media-folder');
+  const useFolder = document.getElementById('use-folder-media');
+  const useYouTube = document.getElementById('use-youtube-media');
+  const sources = document.getElementById('admin-media-source');
+  const youtubeForm = document.getElementById('admin-media-youtube');
   const status = document.getElementById('admin-media-folder-status');
   let useFileInput = !window.showDirectoryPicker;
+  let settings = { source: 'youtube' };
 
-  function show(folder) {
+  function showSource(source) {
+    sources.querySelector('input[value="' + source + '"]').checked = true;
+    youtubeForm.hidden = source !== 'youtube';
+    section.hidden = source !== 'folder';
+  }
+
+  function show(next) {
+    settings = next;
+    const { folder, source } = settings;
+    showSource(source);
     remove.hidden = !folder;
-    status.textContent = folder ? 'Pasta configurada neste navegador: ' + folder.name : '';
+    useFolder.hidden = !folder || source === 'folder';
+    useYouTube.hidden = source === 'youtube';
+    status.textContent = folder
+      ? (source === 'folder' ? 'Pasta em uso neste navegador: ' : 'YouTube em uso. Pasta salva: ') + folder.name
+      : '';
     if (folder?.videos) status.textContent += '. Se os vídeos mudarem, selecione a pasta novamente.';
   }
 
   choose.disabled = true;
-  get(unit).then(show).catch(() => {
+  getSettings(unit).then(show).catch(() => {
     status.textContent = 'Não foi possível consultar a pasta configurada.';
-  }).finally(() => { choose.disabled = false; });
+  }).finally(() => {
+    choose.disabled = false;
+    sources.hidden = false;
+  });
+  sources.addEventListener('change', event => showSource(event.target.value));
 
   async function update(operation) {
-    choose.disabled = true;
-    remove.disabled = true;
+    const buttons = [choose, remove, useFolder, useYouTube];
+    buttons.forEach(button => { button.disabled = true; });
     try {
       show(await operation());
     } catch (error) {
@@ -55,15 +87,15 @@
           : 'Não foi possível atualizar a pasta neste navegador. Você pode escolhê-la diretamente no painel.';
       }
     } finally {
-      choose.disabled = false;
-      remove.disabled = false;
+      buttons.forEach(button => { button.disabled = false; });
     }
   }
 
-  function save(folder) {
+  function save(source, folder) {
     return update(async () => {
-      await access('readwrite', store => store.put(folder, unit));
-      return folder;
+      const next = { source, folder };
+      await access('readwrite', store => store.put(next, unit));
+      return next;
     });
   }
 
@@ -73,11 +105,11 @@
       return;
     }
     try {
-      await save(await window.showDirectoryPicker({ mode: 'read' }));
+      await save('folder', await window.showDirectoryPicker({ mode: 'read' }));
     } catch (error) {
       if (error.name !== 'AbortError') {
         useFileInput = true;
-        status.textContent = 'Clique em Escolher pasta de vídeos novamente para usar o seletor alternativo.';
+        status.textContent = 'Clique em Escolher pasta novamente para usar o seletor alternativo.';
       }
     }
   });
@@ -89,9 +121,12 @@
       status.textContent = 'Nenhum vídeo encontrado na pasta.';
       return;
     }
-    save({ name: videos[0].path.split('/')[0], videos });
+    save('folder', { name: videos[0].path.split('/')[0], videos });
   });
+  useYouTube.addEventListener('click', () => save('youtube', settings.folder));
+  useFolder.addEventListener('click', () => save('folder', settings.folder));
   remove.addEventListener('click', () => update(async () => {
     await access('readwrite', store => store.delete(unit));
+    return { source: 'youtube' };
   }));
 })();

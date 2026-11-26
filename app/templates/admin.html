@@ -18,6 +18,12 @@
     .panel-tabs a { padding: 10px 14px; color: #526078; text-decoration: none; border-bottom: 3px solid transparent; }
     .panel-tabs a:hover, .panel-tabs a[aria-current="page"] { color: #2563eb; }
     .panel-tabs a[aria-current="page"] { border-bottom-color: #2563eb; font-weight: 600; }
+    .media-source { margin: 16px 0; padding: 0; border: 0; }
+    .media-source legend { margin-bottom: 8px; font-weight: 600; }
+    .media-source label { display: inline-flex; align-items: center; gap: 6px; margin: 0 12px 0 0; font-weight: 400; }
+    .media-source input { display: inline; width: auto; margin: 0; accent-color: #2563eb; }
+    #admin-media-folder-input[hidden] { display: none; }
+    .media-settings .color-actions { margin-top: 12px; }
     .logo-section { padding-top: 16px; }
     .logo-preview { display: flex; align-items: center; justify-content: center; width: min(100%, 630px); height: 76px; background: #052343; border-radius: 8px; }
     .logo-preview[hidden] { display: none; }
@@ -85,7 +91,7 @@
           <nav class="panel-tabs" aria-label="Opções de personalização do painel">
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if aba is none %} aria-current="page"{% endif %}>Cores</a>
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'logo' %} aria-current="page"{% endif %}>Logo</a>
-            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'link' %} aria-current="page"{% endif %}>Link</a>
+            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'link' %} aria-current="page"{% endif %}>Mídia</a>
           </nav>
           {% for message in mensagens %}
           <p class="notice" role="alert">{{ message }}</p>
@@ -118,25 +124,33 @@
             <script src="{{ url_for('static', filename='js/admin-logo.js') }}" defer></script>
           </div>
           {% elif aba == 'link' %}
-          <div style="padding-top: 16px;">
-            <form method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link') }}">
+          <div class="media-settings">
+            <fieldset class="media-source" id="admin-media-source" hidden>
+              <legend>Fonte dos vídeos</legend>
+              <label><input type="radio" name="media-source" value="youtube" checked> YouTube</label>
+              <label><input type="radio" name="media-source" value="folder"> Pasta no PC</label>
+            </fieldset>
+            <form id="admin-media-youtube" method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link') }}">
               <input type="hidden" name="form_token" value="{{ form_token }}">
               <label for="link-youtube-{{ unidade.id }}">Link do vídeo ou da playlist do YouTube</label>
               <input id="link-youtube-{{ unidade.id }}" name="link_youtube" type="url" maxlength="2048"
                      value="{{ link_youtube }}" placeholder="https://www.youtube.com/…" aria-describedby="link-youtube-ajuda">
               <p id="link-youtube-ajuda">Para voltar à mídia padrão, apague o link e salve.</p>
-              <button class="primary" type="submit" name="acao" value="salvar_link">Salvar link</button>
-            </form>
-            <section id="admin-media-folder" data-unit="{{ unidade.id }}">
-              <h4>Pasta de vídeos do computador</h4>
-              <p>Use o mesmo computador e perfil de navegador que exibe o painel desta unidade.</p>
               <div class="color-actions">
-                <button type="button" id="save-media-folder">Escolher pasta de vídeos</button>
-                <input type="file" id="admin-media-folder-input" webkitdirectory hidden>
-                <button type="button" id="remove-media-folder" hidden>Remover pasta configurada</button>
+                <button class="primary" type="submit" name="acao" value="salvar_link">Salvar link</button>
+                <button type="button" id="use-youtube-media" hidden>Usar YouTube neste PC</button>
               </div>
-              <p id="admin-media-folder-status" role="status"></p>
+            </form>
+            <section id="admin-media-folder" data-unit="{{ unidade.id }}" hidden>
+              <p>Escolha a pasta no computador e no navegador que exibem o painel.</p>
+              <div class="color-actions">
+                <button class="primary" type="button" id="save-media-folder">Escolher pasta</button>
+                <input type="file" id="admin-media-folder-input" webkitdirectory hidden>
+                <button type="button" id="use-folder-media" hidden>Usar pasta salva</button>
+                <button type="button" id="remove-media-folder" hidden>Remover pasta</button>
+              </div>
             </section>
+            <p id="admin-media-folder-status" role="status"></p>
             <script src="{{ url_for('static', filename='js/media-folder-settings.js') }}" defer></script>
             <p>Para abrir o painel desta unidade, entre com o login <strong>{{ unidade.login }}</strong>.</p>
             <div class="color-actions">
