@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 from flask import Blueprint, flash, redirect, render_template, request, url_for, session, jsonify, Response, current_app, g
 
 from . import db, painel_youtube
-from .auth import cores_painel_da_unidade, obter_link_painel, obter_logo_painel
+from .auth import cores_painel_da_unidade, obter_link_painel, obter_local_tempo, obter_logo_painel
 
 logger = logging.getLogger(__name__)
 
@@ -461,6 +461,7 @@ def painel():
     unidade = g.get("unidade")
     link = obter_link_painel(unidade["id"]) if unidade else ""
     return render_template("painel.html", video_embed=_montar_video_embed(link), cores=cores_painel_da_unidade(),
+                           local_tempo=obter_local_tempo(unidade["id"] if unidade else None),
                            painel_unidade_id=unidade["id"] if unidade else "",
                            logo=obter_logo_painel(unidade["id"]) if unidade else None)
 

@@ -51,8 +51,9 @@
         <div class="section-heading"><h2><span aria-hidden="true">◷</span> PRÓXIMAS SENHAS</h2><span id="queue-count">FILA</span></div>
         <div id="upcoming-list" class="upcoming-list" role="list" aria-label="Próximas senhas na ordem de chamada"><p class="empty">Aguardando informações da fila…</p></div>
       </section>
-      <section class="service-panel weather-panel" aria-label="Tempo em São Miguel do Guaporé">
-        <h2><span aria-hidden="true">⌖</span> São Miguel do Guaporé – RO</h2>
+      <section class="service-panel weather-panel" id="panel-weather" aria-label="Tempo em {{ local_tempo.nome }}"
+               data-city="{{ local_tempo.id }}" data-latitude="{{ local_tempo.latitude }}" data-longitude="{{ local_tempo.longitude }}">
+        <h2><span aria-hidden="true">⌖</span> {{ local_tempo.nome }} – {{ local_tempo.sigla }}</h2>
         <div class="weather-grid" aria-live="polite">
           <div class="weather-main">
             <div class="weather-current"><span id="weather-icon" aria-hidden="true">☁️</span><strong id="weather-temperature">--°</strong></div>

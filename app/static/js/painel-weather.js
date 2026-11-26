@@ -1,11 +1,12 @@
 (() => {
   const INTERVAL = 30 * 60 * 1000;
-  const CACHE_KEY = 'gfilas-weather-sao-miguel-v1';
+  const { city, latitude, longitude } = document.getElementById('panel-weather').dataset;
+  const CACHE_KEY = `gfilas-weather-${city}-v1`;
   const url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
-    latitude: '-11.69361', longitude: '-62.71139',
+    latitude, longitude,
     current: 'temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,is_day',
     daily: 'temperature_2m_max,temperature_2m_min',
-    timezone: 'America/Porto_Velho', forecast_days: '1', wind_speed_unit: 'kmh',
+    timezone: 'auto', forecast_days: '1', wind_speed_unit: 'kmh',
   });
   let cached = null;
   let timer;

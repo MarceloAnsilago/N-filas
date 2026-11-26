@@ -41,7 +41,7 @@
     .card:hover { border-color: #2563eb; box-shadow: 0 8px 24px #17203312; }
     .card:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
     label { display: block; margin: 16px 0 6px; font-weight: 600; }
-    input { display: block; width: 100%; max-width: 520px; padding: 12px; border: 1px solid #aebbd0; border-radius: 8px; font: inherit; }
+    input, select { display: block; width: 100%; max-width: 520px; padding: 12px; border: 1px solid #aebbd0; border-radius: 8px; font: inherit; }
     button { padding: 10px 18px; border: 1px solid #aebbd0; border-radius: 8px; cursor: pointer; font: inherit; }
     .primary { margin-top: 20px; background: #2563eb; color: white; border: 0; }
     .notice { padding: 14px; background: #e7efff; border-radius: 8px; }
@@ -92,6 +92,7 @@
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if aba is none %} aria-current="page"{% endif %}>Cores</a>
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'logo' %} aria-current="page"{% endif %}>Logo</a>
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'link' %} aria-current="page"{% endif %}>Mídia</a>
+            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='tempo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'tempo' %} aria-current="page"{% endif %}>Tempo</a>
           </nav>
           {% for message in mensagens %}
           <p class="notice" role="alert">{{ message }}</p>
@@ -123,6 +124,28 @@
             </form>
             <script src="{{ url_for('static', filename='js/admin-logo.js') }}" defer></script>
           </div>
+          {% elif aba == 'tempo' %}
+            <form id="admin-weather" method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='tempo') }}"
+                  data-catalog="{{ url_for('static', filename='municipios.json') }}">
+              <input type="hidden" name="form_token" value="{{ form_token }}">
+              <label for="weather-uf">Estado</label>
+              <select id="weather-uf" name="uf" required>
+                {% for codigo, estado in estados.items() %}
+                <option value="{{ codigo }}"{% if codigo == local_tempo.uf %} selected{% endif %}>{{ estado.nome }}</option>
+                {% endfor %}
+              </select>
+              <label for="weather-city">Município</label>
+              <select id="weather-city" name="municipio" required>
+                {% for codigo, municipio in estados[local_tempo.uf].municipios.items() %}
+                <option value="{{ codigo }}"{% if codigo == local_tempo.id %} selected{% endif %}>{{ municipio.nome }}</option>
+                {% endfor %}
+              </select>
+              <p id="weather-settings-status" role="status"></p>
+              <div class="color-actions">
+                <button class="primary" type="submit" name="acao" value="salvar_tempo">Salvar local</button>
+              </div>
+            </form>
+            <script src="{{ url_for('static', filename='js/admin-tempo.js') }}" defer></script>
           {% elif aba == 'link' %}
           <div class="media-settings">
             <fieldset class="media-source" id="admin-media-source" hidden>

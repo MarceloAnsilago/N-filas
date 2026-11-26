@@ -10,7 +10,7 @@ from flask import Blueprint, Response, abort, current_app, flash, g, jsonify, re
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db, painel_cores, painel_logo, painel_youtube
+from . import db, painel_cores, painel_logo, painel_tempo, painel_youtube
 from .painel_events import PainelEvents
 
 bp = Blueprint("auth", __name__)
@@ -87,6 +87,11 @@ def init_auth(app):
         conn.execute("""
             CREATE TABLE IF NOT EXISTS painel_youtube (
                 unidade_id INTEGER PRIMARY KEY, link TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS painel_tempo (
+                unidade_id INTEGER PRIMARY KEY, municipio TEXT NOT NULL
             )
         """)
     app.extensions["unidades_lock"] = Lock()
@@ -173,7 +178,7 @@ def login_page(admin_only):
 def admin_page():
     unidade_painel = request.args.get("unidade_painel", type=int)
     aba = request.args.get("aba")
-    if aba not in {"logo", "link"}:
+    if aba not in {"logo", "link", "tempo"}:
         aba = None
     with accounts() as conn:
         if "unidade_painel" in request.args:
@@ -226,6 +231,17 @@ def admin_page():
             elif aba == "logo" and acao == "remover_logo":
                 conn.execute("DELETE FROM painel_logo WHERE unidade_id = ?", (unidade_painel,))
                 flash("Logo padrão restaurado.", "success")
+            elif aba == "tempo" and acao == "salvar_tempo":
+                estado = painel_tempo.ESTADOS.get(request.form.get("uf"))
+                municipio = request.form.get("municipio")
+                if not estado or municipio not in estado["municipios"]:
+                    flash("Escolha um município do estado selecionado.", "warning")
+                else:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO painel_tempo (unidade_id, municipio) VALUES (?, ?)",
+                        (unidade_painel, municipio),
+                    )
+                    flash("Local da previsão do tempo salvo.", "success")
             elif aba == "link" and acao == "salvar_link":
                 link = request.form.get("link_youtube", "").strip()
                 if not link:
@@ -278,7 +294,16 @@ def admin_page():
     return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel, aba=aba,
                            itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token(),
                            logo=obter_logo_painel(unidade_painel) if aba == "logo" else None,
-                           link_youtube=obter_link_painel(unidade_painel) if aba == "link" else "")
+                           link_youtube=obter_link_painel(unidade_painel) if aba == "link" else "",
+                           local_tempo=obter_local_tempo(unidade_painel) if aba == "tempo" else None,
+                           estados=painel_tempo.ESTADOS)
+
+
+def obter_local_tempo(unidade_id):
+    if unidade_id is None:
+        return painel_tempo.local_municipio()
+    with accounts() as conn:
+        return painel_tempo.ler_local(conn, unidade_id)
 
 
 def obter_link_painel(unidade_id):
