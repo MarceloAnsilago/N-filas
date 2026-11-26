@@ -609,10 +609,7 @@ def _montar_video_embed(link_youtube: str = "") -> str:
         or os.getenv("PAINEL_YT_PLAYLIST_ID")
         or DEFAULT_PLAYLIST_ID
     )
-    mute_param = "&mute=1" if yt_muted else "&mute=0"
-    return _iframe_youtube(
-        f"https://www.youtube-nocookie.com/embed/videoseries?list={playlist}&autoplay=1&loop=1&playsinline=1&rel=0&modestbranding=1{mute_param}"
-    )
+    return _iframe_youtube(painel_youtube.origem_playlist(playlist, yt_muted))
 
 
 def _iframe_youtube(origem):

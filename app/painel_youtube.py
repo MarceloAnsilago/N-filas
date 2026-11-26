@@ -2,6 +2,13 @@ import re
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 
+def origem_playlist(playlist, muted):
+    return (
+        f"https://www.youtube-nocookie.com/embed/videoseries?list={playlist}"
+        f"&autoplay=1&loop=1&playsinline=1&rel=0&modestbranding=1&mute={int(muted)}"
+    )
+
+
 def origem_embed(link, muted):
     try:
         url = urlsplit(link)
@@ -28,9 +35,7 @@ def origem_embed(link, muted):
 
     opcoes = {"autoplay": 1, "loop": 1, "playsinline": 1, "rel": 0, "mute": int(muted)}
     if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", playlist):
-        destino = "https://www.youtube.com/embed"
-        opcoes["listType"] = "playlist"
-        opcoes["list"] = playlist
+        return origem_playlist(playlist, muted)
     elif re.fullmatch(r"[A-Za-z0-9_-]{11}", video):
         destino = f"https://www.youtube-nocookie.com/embed/{video}"
         opcoes["playlist"] = video
