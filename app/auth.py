@@ -167,7 +167,9 @@ def login_page(admin_only):
 
 def admin_page():
     unidade_painel = request.args.get("unidade_painel", type=int)
-    aba = "logo" if request.args.get("aba") == "logo" else None
+    aba = request.args.get("aba")
+    if aba not in {"logo", "link"}:
+        aba = None
     with accounts() as conn:
         if "unidade_painel" in request.args:
             unidade = conn.execute(
@@ -255,7 +257,7 @@ def admin_page():
     with accounts() as conn:
         unidades = [dict(row) for row in conn.execute("SELECT id, nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
         cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None else {}
-    return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel,
+    return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel, aba=aba,
                            itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token(),
                            logo=obter_logo_painel(unidade_painel) if aba == "logo" else None)
 

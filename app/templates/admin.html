@@ -80,17 +80,17 @@
         <h2>{{ unidade.nome }}</h2>
         <p>Login: <strong>{{ unidade.login }}</strong></p>
         {% if unidade.id == unidade_painel %}
-        {% set logo_ativo = request.args.get('aba') == 'logo' %}
         <section class="unit-panel" aria-labelledby="painel-titulo-{{ unidade.id }}">
           <h3 id="painel-titulo-{{ unidade.id }}">Personalizar painel</h3>
           <nav class="panel-tabs" aria-label="Opções de personalização do painel">
-            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if not logo_ativo %} aria-current="page"{% endif %}>Cores</a>
-            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if logo_ativo %} aria-current="page"{% endif %}>Logo</a>
+            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if aba is none %} aria-current="page"{% endif %}>Cores</a>
+            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'logo' %} aria-current="page"{% endif %}>Logo</a>
+            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'link' %} aria-current="page"{% endif %}>Link</a>
           </nav>
           {% for message in mensagens %}
           <p class="notice" role="alert">{{ message }}</p>
           {% endfor %}
-          {% if logo_ativo %}
+          {% if aba == 'logo' %}
           <div class="logo-section">
             {% if not logo %}<p id="logo-padrao">O painel usa o logo padrão.</p>{% endif %}
             <div class="logo-preview" id="logo-previa"{% if not logo %} hidden{% endif %}>
@@ -116,6 +116,15 @@
               </div>
             </form>
             <script src="{{ url_for('static', filename='js/admin-logo.js') }}" defer></script>
+          </div>
+          {% elif aba == 'link' %}
+          <div style="padding-top: 16px;">
+            <p>Para abrir o painel desta unidade, entre com o login <strong>{{ unidade.login }}</strong>.</p>
+            <div class="color-actions">
+              <a class="open" href="{{ url_for('web.painel') }}">Abrir painel</a>
+              <a class="open" href="{{ url_for('web.painel_compacto') }}">Abrir painel compacto</a>
+              <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+            </div>
           </div>
           {% else %}
           <form method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id) }}">
