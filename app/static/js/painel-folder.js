@@ -63,9 +63,7 @@
   });
 
   function playFiles(selected) {
-    const videos = selected.filter(({ file }) =>
-      file.type.startsWith('video/') || /\.(mp4|m4v|webm|ogv|mov|mkv|avi|mpeg|mpg)$/i.test(file.name)
-    );
+    const videos = selected.filter(({ file }) => window.painelFolderSettings.isVideo(file));
     if (!videos.length) {
       status.textContent = 'Nenhum vídeo encontrado na pasta.';
       return;
@@ -109,10 +107,12 @@
   }
 
   allow.addEventListener('click', () => playConfigured(true));
-  if (media.dataset.unit && window.showDirectoryPicker) {
+  if (media.dataset.unit) {
     window.painelFolderSettings.get(media.dataset.unit).then(folder => {
       configuredFolder = folder;
-      if (folder && selection === 0) return playConfigured(false);
+      if (!folder || selection !== 0) return;
+      if (folder.videos) playFiles(folder.videos);
+      else return playConfigured(false);
     }).catch(() => {
       if (selection === 0) status.textContent = 'Não foi possível consultar a pasta configurada.';
     });
