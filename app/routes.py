@@ -461,6 +461,7 @@ def painel():
     unidade = g.get("unidade")
     link = obter_link_painel(unidade["id"]) if unidade else ""
     return render_template("painel.html", video_embed=_montar_video_embed(link), cores=cores_painel_da_unidade(),
+                           painel_unidade_id=unidade["id"] if unidade else "",
                            logo=obter_logo_painel(unidade["id"]) if unidade else None)
 
 

@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, '../app/static/js/painel-aud
 function setup({ volume = 70, video = null, delayed = false } = {}) {
   let events;
   const iframe = { src: 'https://www.youtube-nocookie.com/embed/videoseries?list=test&mute=1' };
-  const player = { getVolume: () => volume, setVolume: value => { volume = value; } };
+  const player = { getVolume: () => volume, setVolume: value => { volume = value; }, destroy() {} };
   const context = {
     window: {}, URL, location: { href: 'https://example.com/painel', origin: 'https://example.com' },
     document: {
@@ -58,4 +58,19 @@ test('native video restores volume after overlapping calls', () => {
   assert.equal(video.volume, 0.15);
   state.media.restore();
   assert.equal(video.volume, 0.8);
+});
+
+test('switching between YouTube and local video preserves an active announcement', () => {
+  const state = setup();
+  const local = { volume: 0.8 };
+  state.media.lower();
+  state.media.select(local);
+  assert.equal(state.volume(), 70);
+  assert.equal(local.volume, 0.15);
+  state.media.select(null, state.iframe);
+  assert.equal(local.volume, 0.8);
+  state.ready();
+  assert.equal(state.volume(), 15);
+  state.media.restore();
+  assert.equal(state.volume(), 70);
 });

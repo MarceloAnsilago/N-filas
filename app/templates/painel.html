@@ -28,7 +28,14 @@
       <span id="panel-date"></span>
     </section>
     <main class="stage">
-      <div class="video">{{ video_embed|safe }}</div>
+      <div class="video" id="panel-media" data-unit="{{ painel_unidade_id }}">{{ video_embed|safe }}</div>
+      <div class="media-options">
+        <button type="button" id="choose-media-folder">Escolher pasta de vídeos</button>
+        <button type="button" id="allow-media-folder" hidden>Autorizar pasta configurada</button>
+        <button type="button" id="restore-panel-media" hidden>Voltar à mídia padrão</button>
+        <input type="file" id="media-folder" webkitdirectory hidden>
+        <span id="media-folder-status" role="status"></span>
+      </div>
       <div id="backdrop" class="call-overlay" hidden>
         <section class="current-call" aria-live="polite" aria-atomic="true">
           <h1><span aria-hidden="true">◖))</span> <span id="call-title">AGUARDANDO CHAMADA</span></h1>
@@ -69,6 +76,8 @@
   </div>
   <script src="{{ url_for('static', filename='js/painel-weather.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/painel-audio.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/media-folder-settings.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/painel-folder.js') }}" defer></script>
   <script>
   (function(){
     const EVENTS_URL = "{{ url_for('web.painel_events') }}";

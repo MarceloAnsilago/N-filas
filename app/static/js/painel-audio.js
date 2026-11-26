@@ -3,7 +3,8 @@
   let ready = false;
   let announcing = false;
   let originalVolume = null;
-  const video = document.querySelector('.video video');
+  let video = null;
+  let iframe = null;
 
   function lowerVolume() {
     if (video) {
@@ -16,6 +17,18 @@
   }
 
   window.painelMedia = {
+    select(nextVideo, nextIframe = null) {
+      const wasAnnouncing = announcing;
+      this.restore();
+      if (player) player.destroy();
+      player = null;
+      ready = false;
+      video = nextVideo;
+      iframe = nextIframe;
+      announcing = wasAnnouncing;
+      if (announcing) lowerVolume();
+      if (iframe) setupYouTube(iframe);
+    },
     lower() {
       announcing = true;
       lowerVolume();
@@ -29,29 +42,34 @@
     },
   };
 
-  const iframe = document.querySelector('.video iframe');
-  if (!iframe) return;
-  const url = new URL(iframe.src, location.href);
-  if (!['youtube.com', 'www.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com'].includes(url.hostname)) return;
-  url.searchParams.set('enablejsapi', '1');
-  url.searchParams.set('origin', location.origin);
-  iframe.src = url.toString();
+  function setupYouTube(frame) {
+    const url = new URL(frame.src, location.href);
+    if (!['youtube.com', 'www.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com'].includes(url.hostname)) return;
+    url.searchParams.set('enablejsapi', '1');
+    url.searchParams.set('origin', location.origin);
+    frame.src = url.toString();
 
-  function initialize() {
-    player = new YT.Player(iframe, {
-      events: {
-        onReady() {
-          ready = true;
-          if (announcing) lowerVolume();
+    function initialize() {
+      if (iframe !== frame) return;
+      player = new YT.Player(frame, {
+        events: {
+          onReady() {
+            if (iframe !== frame) return;
+            ready = true;
+            if (announcing) lowerVolume();
+          },
         },
-      },
-    });
+      });
+    }
+    if (window.YT?.Player) initialize();
+    else {
+      const loading = Boolean(window.onYouTubeIframeAPIReady);
+      window.onYouTubeIframeAPIReady = initialize;
+      if (loading) return;
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(script);
+    }
   }
-  if (window.YT?.Player) initialize();
-  else {
-    window.onYouTubeIframeAPIReady = initialize;
-    const script = document.createElement('script');
-    script.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(script);
-  }
+  window.painelMedia.select(document.querySelector('.video video'), document.querySelector('.video iframe'));
 })();
