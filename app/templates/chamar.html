@@ -341,6 +341,9 @@
           </div>
           <div class="atendimento-badges">
             <span class="badge text-bg-dark">{{ chamada_aberta.unidade }}</span>
+            {% if chamada_aberta.origem == 'totem' %}
+            <span class="badge text-bg-secondary">{{ nome_atendimento(chamada_aberta.prioridade) }}</span>
+            {% endif %}
             <span class="badge text-bg-secondary">{{ chamada_aberta.resposta or "chamando" }}</span>
           </div>
         </div>

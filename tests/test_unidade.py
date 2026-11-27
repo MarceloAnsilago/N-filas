@@ -21,16 +21,18 @@ class UnidadeTests(unittest.TestCase):
         self.app.register_blueprint(bp)
         with self.app.app_context():
             db.init_db()
+            db.cadastrar_atendimento_totem("Normal")
+            db.cadastrar_atendimento_totem("Prioritário")
         self.client = self.app.test_client()
 
     def test_emission_uses_default_and_saved_unit_name(self):
         self.assertNotIn('name="unidade"', self.client.get("/gerar").get_data(as_text=True))
-        normal = self.client.post("/senhas/emitir/normal")
-        self.assertEqual(normal.get_json()["senha"], "101")
+        normal = self.client.post("/senhas/emitir/1")
+        self.assertEqual(normal.get_json()["senha"], "001")
         with self.app.app_context():
             db.salvar_unidade_padrao("Nova Unidade")
-        preferencial = self.client.post("/senhas/emitir/preferencial")
-        self.assertEqual(preferencial.get_json()["senha"], "001")
+        preferencial = self.client.post("/senhas/emitir/2")
+        self.assertEqual(preferencial.get_json()["senha"], "002")
         with self.app.app_context(), db.conectar() as conn:
             rows = conn.execute("SELECT unidade FROM senha ORDER BY id").fetchall()
             self.assertEqual([row["unidade"] for row in rows], ["ULSAV SMG", "Nova Unidade"])
@@ -41,8 +43,8 @@ class UnidadeTests(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn('src="/static/js/senhas-wake-lock.js" defer', page)
         self.assertIn('id="wake-lock-notice" role="status" hidden', page)
-        self.assertIn('data-issue-url="/senhas/emitir/normal"', page)
-        self.assertIn('data-issue-url="/senhas/emitir/preferencial"', page)
+        self.assertIn('data-issue-url="/senhas/emitir/1"', page)
+        self.assertIn('data-issue-url="/senhas/emitir/2"', page)
         for route in ("/", "/gerar", "/painel", "/chamar"):
             with self.subTest(route=route):
                 response = self.client.get(route)

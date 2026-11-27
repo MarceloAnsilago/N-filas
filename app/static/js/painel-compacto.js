@@ -3,7 +3,7 @@
   const connection = document.getElementById('monitor-connection');
   const setText = (id, value) => { document.getElementById(id).textContent = value; };
   const ticket = value => String(value ?? '').padStart(3, '0');
-  const priority = item => item.prioridade === 'preferencial' ? 'Preferencial' : 'Normal';
+  const priority = item => item.atendimento || (item.prioridade === 'preferencial' ? 'Preferencial' : 'Normal');
   let source = null;
 
   function renderList(id, items, history) {

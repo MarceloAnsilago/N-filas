@@ -48,6 +48,8 @@
     h2 { margin: 0 0 10px; font-size: 1.15rem; }
     .card p { margin: 0; color: #526078; line-height: 1.6; }
     .open { display: inline-block; margin-top: 20px; color: #2563eb; font-weight: 600; }
+    .service-list { list-style: none; padding: 0; }
+    .service-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #dce3ef; }
   </style>
 </head>
 <body>
@@ -105,6 +107,30 @@
           <p class="notice" role="alert">{{ message }}</p>
           {% endfor %}
           {% if aba == 'senhas' %}
+          {% set url_atendimentos = url_for('web.admin', unidade_painel=unidade.id, aba='senhas') %}
+          <form method="post" action="{{ url_atendimentos }}">
+            <input type="hidden" name="form_token" value="{{ form_token }}">
+            <label for="nome-atendimento">Nome do atendimento</label>
+            <input id="nome-atendimento" name="nome_atendimento" type="text" required maxlength="80">
+            <button class="primary" type="submit" name="acao" value="cadastrar_atendimento">Adicionar atendimento</button>
+          </form>
+          {% if atendimentos %}
+          <ul class="service-list" aria-label="Atendimentos cadastrados">
+            {% for atendimento in atendimentos %}
+            <li>
+              <div><strong>{{ atendimento.nome }}</strong> · {{ 'Ativo' if atendimento.ativo else 'Inativo' }}</div>
+              <form method="post" action="{{ url_atendimentos }}">
+                <input type="hidden" name="form_token" value="{{ form_token }}">
+                <input type="hidden" name="atendimento_id" value="{{ atendimento.id }}">
+                <button type="submit" name="acao" value="{{ 'desativar_atendimento' if atendimento.ativo else 'ativar_atendimento' }}"
+                        aria-label="{{ 'Desativar' if atendimento.ativo else 'Ativar' }} {{ atendimento.nome }}">{{ 'Desativar' if atendimento.ativo else 'Ativar' }}</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p>Nenhum atendimento cadastrado. Adicione os tipos que devem aparecer na tela de senhas.</p>
+          {% endif %}
           <p>Para abrir a tela de emissão de senhas, entre com o login <strong>{{ unidade.login }}</strong>.</p>
           <div class="color-actions">
             <a class="open" href="{{ url_for('web.senhas') }}">Abrir tela de senhas</a>

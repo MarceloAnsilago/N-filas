@@ -124,17 +124,18 @@ class PainelEventsTests(unittest.TestCase):
             stream = iter(response.response)
             next(stream)
             try:
-                for priority in ("normal", "preferencial"):
-                    emitted = client.post(f"/senhas/emitir/{priority}")
+                for atendimento_id, nome in enumerate(("Recepção", "Vacinação"), 1):
+                    with app.app_context():
+                        db.cadastrar_atendimento_totem(nome)
+                    emitted = client.post(f"/senhas/emitir/{atendimento_id}")
                     self.assertEqual(emitted.status_code, 200)
                     snapshot = payload(next(stream))
                     self.assertTrue(snapshot["proximas_senhas"])
-                    self.assertEqual(snapshot["proximas_senhas"][0]["prioridade"],
-                                     "normal" if priority == "normal" else "preferencial")
+                    self.assertEqual(snapshot["proximas_senhas"][-1]["atendimento"], nome)
                 fragment = client.get("/chamar?fragment=fila").get_data(as_text=True)
                 self.assertIn("2 aguardando", fragment)
-                self.assertIn('fila-totem-card normal', fragment)
-                self.assertIn('fila-totem-card preferencial', fragment)
+                self.assertIn("Recepção", fragment)
+                self.assertIn("Vacinação", fragment)
                 self.assertNotIn('<html', fragment)
                 self.assertNotIn('name="usuario"', fragment)
                 self.assertNotIn('window.location.reload()', fragment)

@@ -128,7 +128,7 @@
         const number = document.createElement('strong');
         number.textContent = senha;
         const destination = document.createElement('p');
-        destination.textContent = `Guichê ${term}`;
+        destination.textContent = [it.atendimento, `Guichê ${term}`].filter(Boolean).join(' · ');
         const time = document.createElement('time');
         time.textContent = hora.slice(11, 16);
         card.title = `${unidade} — ${resp || 'Atendimento encerrado'}`;
@@ -172,7 +172,7 @@
         unit.textContent = item.unidade || 'Atendimento';
         unit.title = unit.textContent;
         const caption = document.createElement('small');
-        caption.textContent = `${preferred ? 'Preferencial' : 'Normal'}${index === 0 ? ' · Próxima chamada' : ''}`;
+        caption.textContent = `${item.atendimento || (preferred ? 'Preferencial' : 'Normal')}${index === 0 ? ' · Próxima chamada' : ''}`;
         details.append(unit, caption);
         const priority = document.createElement('span');
         priority.className = 'priority';
@@ -200,7 +200,7 @@
       document.getElementById('current-ticket').textContent = item ? z3(item.senha) : '—';
       document.getElementById('current-counter').textContent = item?.terminal ? String(item.terminal).padStart(2, '0') : '—';
       document.getElementById('call-title').textContent = item ? 'SENHA CHAMADA' : 'AGUARDANDO CHAMADA';
-      document.getElementById('current-unit').textContent = item?.unidade || 'Retire sua senha e aguarde o atendimento.';
+      document.getElementById('current-unit').textContent = [item?.unidade, item?.atendimento].filter(Boolean).join(' · ') || 'Retire sua senha e aguarde o atendimento.';
       const attendant = document.getElementById('current-attendant');
       attendant.hidden = !item?.usuario;
       attendant.textContent = item?.usuario ? `Atendimento: ${item.usuario}` : '';
@@ -240,7 +240,7 @@
       return (prioridade || '').toLowerCase() === 'preferencial' ? 'preferencial' : 'normal';
     }
 
-    function showModal(senha, unidade, terminal, atendente, prioridade){
+    function showModal(senha, unidade, terminal, atendente, prioridade, atendimento){
       const destinoTerminal = terminal ? `terminal ${terminal}` : 'terminal de atendimento';
       clearTimeout(modalTimer);
       clearTimeout(voiceTimer);
@@ -250,7 +250,7 @@
       window.painelMedia.lower();
       // Restore even when a browser fails to deliver speech completion events.
       audioTimer = setTimeout(()=>finishAnnouncement(id), 30000);
-      renderCurrent({senha, unidade, terminal, usuario: atendente});
+      renderCurrent({senha, unidade, terminal, usuario: atendente, atendimento});
       backdrop.hidden = false;
       const call = document.querySelector('.current-call');
       call.classList.remove('is-calling');
@@ -258,7 +258,7 @@
       call.classList.add('is-calling');
       beep();
       const numeroFalado = parseInt(senha, 10) || 0;
-      const tipoFalado = prioridadeFalado(prioridade);
+      const tipoFalado = atendimento || prioridadeFalado(prioridade);
       voiceTimer = setTimeout(()=>falar(`Senha ${tipoFalado} ${numeroFalado}, dirija-se ao ${destinoTerminal}`, id), 350);
       modalTimer = setTimeout(()=>{ backdrop.hidden = true; }, 4500);
     }
@@ -281,7 +281,7 @@
           ].join('|')
         : null;
       if(atual && deveAnunciar && chave !== lastKey){
-        showModal(atual.senha, atual.unidade, atual.terminal, atual.usuario, atual.prioridade);
+        showModal(atual.senha, atual.unidade, atual.terminal, atual.usuario, atual.prioridade, atual.atendimento);
       }
       if(chave !== lastKey){ lastKey = chave; }
     }

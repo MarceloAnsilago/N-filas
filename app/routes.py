@@ -31,11 +31,6 @@ FIELD_LABELS = {
     "senha_final": "senha final",
 }
 MAX_PAINEL_ULTIMAS = _read_env_int("PAINEL_MAX_ULTIMAS", 8)
-PRIORIDADE_LABELS = {
-    "normal": "Senha normal",
-    "preferencial": "Senha preferencial",
-}
-
 bp = Blueprint("web", __name__)
 
 
@@ -156,7 +151,7 @@ def chamar():
         total_aguardando=len(aguardando),
         data_producao=data_producao,
         origem_fila_ativa=fila_ativa["origem"] if fila_ativa else None,
-        prioridade_labels=PRIORIDADE_LABELS,
+        nome_atendimento=db.nome_atendimento,
     )
 
 @bp.route("/gerar", methods=["GET", "POST"])
@@ -220,10 +215,6 @@ def gerar_senhas():
     data_padrao = date.today().isoformat()
     data_producao = db.obter_data_producao_ativa()
     origem_padrao = db.obter_origem_padrao()
-    ultimo_normal = db.obter_ultimo_numero_totem("normal")
-    ultimo_preferencial = db.obter_ultimo_numero_totem("preferencial")
-    remanescentes_normal = db.contar_remanescentes_totem("normal")
-    remanescentes_preferencial = db.contar_remanescentes_totem("preferencial")
     sessoes_brutas = db.listar_sessoes_por_data(origem="lote")
     sessoes = []
     for sessao in sessoes_brutas:
@@ -241,10 +232,6 @@ def gerar_senhas():
         data_padrao=data_padrao,
         sessoes=sessoes,
         data_producao=data_producao,
-        ultimo_normal=ultimo_normal,
-        ultimo_preferencial=ultimo_preferencial,
-        remanescentes_normal=remanescentes_normal,
-        remanescentes_preferencial=remanescentes_preferencial,
     )
 
 
@@ -294,30 +281,6 @@ def excluir_sessao_senhas():
     else:
         flash("Nenhuma senha encontrada para essa data.", "info")
 
-    return redirect(url_for("web.gerar_senhas"))
-
-
-@bp.route("/gerar/reiniciar-totem", methods=["POST"])
-def reiniciar_totem():
-    prioridade = (request.form.get("prioridade") or "").strip().lower()
-    if prioridade not in PRIORIDADE_LABELS:
-        flash("Prioridade invalida para reinicio.", "warning")
-        return redirect(url_for("web.gerar_senhas"))
-
-    remover_remanescentes = request.form.get("remover_remanescentes") == "1"
-    removidas = 0
-    if remover_remanescentes:
-        removidas = db.excluir_remanescentes_totem(prioridade)
-
-    db.reiniciar_numero_totem(prioridade)
-    if remover_remanescentes:
-        _notify_painel()
-        flash(
-            f"Contador de {PRIORIDADE_LABELS[prioridade].lower()} reiniciado e {removidas} senha(s) remanescente(s) removida(s).",
-            "success",
-        )
-    else:
-        flash(f"Contador de {PRIORIDADE_LABELS[prioridade].lower()} reiniciado.", "success")
     return redirect(url_for("web.gerar_senhas"))
 
 
@@ -468,24 +431,20 @@ def painel():
 
 @bp.route("/senhas")
 def senhas():
-    return render_template("senhas.html")
+    return render_template("senhas.html", atendimentos=db.listar_atendimentos_totem(somente_ativos=True))
 
 
-@bp.post("/senhas/emitir/<prioridade>")
-def emitir_senha(prioridade: str):
-    prioridade = prioridade.strip().lower()
-    if prioridade not in PRIORIDADE_LABELS:
-        return jsonify(ok=False, message="Tipo de senha inválido."), 400
-
+@bp.post("/senhas/emitir/<int:atendimento_id>")
+def emitir_senha(atendimento_id):
     try:
-        identificador, numero_int = db.emitir_senha_totem(prioridade)
-    except db.LimitePreferencial:
-        return jsonify(ok=False, message="A fila preferencial atingiu o limite 100. Reinicie o contador para voltar ao 001."), 409
+        identificador, numero_int, nome = db.emitir_senha_totem(atendimento_id)
+    except db.AtendimentoIndisponivel:
+        return jsonify(ok=False, message="Atendimento indispon?vel. Atualize a tela de senhas."), 404
 
     _notify_painel()
     numero = f"{numero_int:03}"
-    return jsonify(ok=True, message=f"{PRIORIDADE_LABELS[prioridade]} {numero} emitida.", senha=numero,
-                   prioridade=prioridade, id=identificador)
+    return jsonify(ok=True, message=f"Senha {numero} emitida para {nome}.", senha=numero,
+                   atendimento=nome, id=identificador)
 
 
 @bp.route("/painel/status")

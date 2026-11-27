@@ -183,7 +183,7 @@ def admin_page():
     with accounts() as conn:
         if "unidade_painel" in request.args:
             unidade = conn.execute(
-                "SELECT id FROM unidade_login WHERE id = ? AND is_admin = 0", (unidade_painel,)
+                "SELECT id, legacy FROM unidade_login WHERE id = ? AND is_admin = 0", (unidade_painel,)
             ).fetchone()
             if unidade is None:
                 abort(404)
@@ -200,6 +200,21 @@ def admin_page():
                 return redirect(destino)
             if not valid_form():
                 flash("Atualize a página e tente novamente.", "warning")
+            elif aba == "senhas":
+                g.db_path = unit_path(unidade)
+                try:
+                    if acao == "cadastrar_atendimento":
+                        db.cadastrar_atendimento_totem(request.form.get("nome_atendimento", ""))
+                        flash("Atendimento cadastrado.", "success")
+                    elif acao in {"ativar_atendimento", "desativar_atendimento"}:
+                        db.definir_atendimento_totem_ativo(
+                            request.form.get("atendimento_id", type=int), acao == "ativar_atendimento"
+                        )
+                        flash("Atendimentos do totem atualizados.", "success")
+                    else:
+                        abort(400)
+                except ValueError as erro:
+                    flash(str(erro), "warning")
             elif aba != "senhas" and acao in {"salvar_cores", "restaurar_cores"}:
                 cores = {} if acao == "restaurar_cores" else painel_cores.validar_cores(request.form)
                 if cores is None:
@@ -290,9 +305,14 @@ def admin_page():
                 flash("Este login ja esta em uso. Escolha outro.", "warning")
     with accounts() as conn:
         unidades = [dict(row) for row in conn.execute("SELECT id, nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
-        cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None else {}
+        cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None and aba != "senhas" else {}
+    atendimentos = []
+    if aba == "senhas" and unidade_painel is not None:
+        g.db_path = unit_path(unidade)
+        atendimentos = db.listar_atendimentos_totem()
     return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel, aba=aba,
                            itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token(),
+                           atendimentos=atendimentos,
                            logo=obter_logo_painel(unidade_painel) if aba == "logo" else None,
                            link_youtube=obter_link_painel(unidade_painel) if aba == "link" else "",
                            local_tempo=obter_local_tempo(unidade_painel) if aba == "tempo" else None,

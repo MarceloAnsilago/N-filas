@@ -304,12 +304,20 @@ def obter_painel_status_snapshot(limite: int = 8):
             (fila["data"], fila["origem"]),
         ).fetchall() if fila else []
 
-    atual_dict = dict(atual) if atual else None
-    ultimas_dict = [dict(row) for row in ultimas]
+    atual_dict = _senha_para_painel(atual) if atual else None
+    ultimas_dict = [_senha_para_painel(row) for row in ultimas]
     if not atual_dict and ultimas_dict:
         atual_dict = ultimas_dict[0]
     return {"senha_atual": atual_dict, "ultimas_senhas": ultimas_dict,
-            "proximas_senhas": [dict(row) for row in proximas]}
+            "proximas_senhas": [_senha_para_painel(row) for row in proximas]}
+
+
+def _senha_para_painel(row):
+    senha = dict(row)
+    prioridade = senha["prioridade"]
+    if prioridade and prioridade.startswith("atendimento:"):
+        senha["atendimento"] = nome_atendimento(prioridade)
+    return senha
 
 def listar_sessoes_por_data(origem: str | None = None):
     """Agrupa as senhas existentes por data."""
@@ -376,22 +384,56 @@ def obter_origem_padrao() -> str:
     return valor if valor in {"lote", "totem"} else "lote"
 
 
-class LimitePreferencial(ValueError):
+class AtendimentoIndisponivel(ValueError):
     pass
 
 
-def obter_ultimo_numero_totem(prioridade: str) -> int:
+def _criar_tabela_atendimentos(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS atendimento_totem (
+            id INTEGER PRIMARY KEY,
+            nome TEXT NOT NULL,
+            nome_normalizado TEXT NOT NULL UNIQUE,
+            ativo INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+
+
+def listar_atendimentos_totem(*, somente_ativos=False):
     with conectar() as conn:
-        return _ultimo_numero_totem(conn, prioridade)
+        _criar_tabela_atendimentos(conn)
+        filtro = " WHERE ativo = 1" if somente_ativos else ""
+        return conn.execute("SELECT id, nome, ativo FROM atendimento_totem" + filtro + " ORDER BY id").fetchall()
 
 
-def _ultimo_numero_totem(conn, prioridade: str) -> int:
-    row = conn.execute("SELECT valor FROM configuracao WHERE chave = ?", (_chave_contador_totem(prioridade),)).fetchone()
-    base = 0 if prioridade == "preferencial" else 100
-    try:
-        return int(row["valor"]) if row else base
-    except (TypeError, ValueError):
-        return base
+def cadastrar_atendimento_totem(nome):
+    nome = " ".join(nome.split())
+    if not 1 <= len(nome) <= 80:
+        raise ValueError("Informe um nome de atendimento com até 80 caracteres.")
+    with conectar() as conn:
+        _criar_tabela_atendimentos(conn)
+        inserido = conn.execute("""
+            INSERT INTO atendimento_totem (nome, nome_normalizado) VALUES (?, ?)
+            ON CONFLICT(nome_normalizado) DO NOTHING
+        """, (nome, nome.casefold()))
+        if not inserido.rowcount:
+            raise ValueError("Já existe um atendimento com esse nome.")
+
+
+def definir_atendimento_totem_ativo(atendimento_id, ativo):
+    with conectar() as conn:
+        _criar_tabela_atendimentos(conn)
+        atualizado = conn.execute("UPDATE atendimento_totem SET ativo = ? WHERE id = ?", (ativo, atendimento_id))
+        if not atualizado.rowcount:
+            raise ValueError("Atendimento não encontrado.")
+
+
+def nome_atendimento(prioridade):
+    if prioridade and prioridade.startswith("atendimento:"):
+        return prioridade.removeprefix("atendimento:")
+    if prioridade == "preferencial":
+        return "Senha preferencial"
+    return "Senha normal"
 
 
 def _salvar_configuracao(conn, chave, valor):
@@ -404,89 +446,30 @@ def _salvar_configuracao(conn, chave, valor):
     )
 
 
-def emitir_senha_totem(prioridade: str):
+def emitir_senha_totem(atendimento_id: int):
     unidade = obter_unidade_padrao()
     with conectar() as conn:
+        _criar_tabela_atendimentos(conn)
         conn.execute("BEGIN IMMEDIATE")
-        numero = _ultimo_numero_totem(conn, prioridade) + 1
-        if prioridade == "preferencial" and numero > 100:
-            raise LimitePreferencial
-        if prioridade == "normal":
-            numero = max(101, numero)
+        atendimento = conn.execute(
+            "SELECT nome FROM atendimento_totem WHERE id = ? AND ativo = 1", (atendimento_id,)
+        ).fetchone()
+        if atendimento is None:
+            raise AtendimentoIndisponivel
+        nome = atendimento["nome"]
+        chave = "contador_totem_atendimentos"
+        contador = conn.execute("SELECT valor FROM configuracao WHERE chave = ?", (chave,)).fetchone()
+        ultimo = int(contador["valor"]) if contador else conn.execute("""
+            SELECT COALESCE(MAX(senha), 0) FROM senha WHERE origem = 'totem'
+        """).fetchone()[0]
+        numero = ultimo + 1
 
         identificador = _inserir_senha(conn, numero, unidade, "totem", datetime.now(FUSO_HORARIO).date(),
-                                     prioridade, "totem")
-        _salvar_configuracao(conn, _chave_contador_totem(prioridade), str(numero))
+                                     f"atendimento:{nome}", "totem")
+        _salvar_configuracao(conn, chave, str(numero))
         _salvar_configuracao(conn, "origem_padrao", "totem")
         conn.execute("DELETE FROM configuracao WHERE chave = 'data_producao'")
-    return identificador, numero
-
-
-def reiniciar_numero_totem(prioridade: str) -> None:
-    """Reinicia o contador do totem para a prioridade."""
-    prioridade = _normalizar_prioridade(prioridade)
-    valor_base = 0 if prioridade == "preferencial" else 100
-    with conectar() as conn:
-        _salvar_configuracao(conn, _chave_contador_totem(prioridade), str(valor_base))
-
-
-def contar_remanescentes_totem(prioridade: str) -> int:
-    """Conta senhas do totem da mesma prioridade ainda nao encerradas na data ativa."""
-    prioridade = _normalizar_prioridade(prioridade)
-    with conectar() as conn:
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS total
-            FROM senha
-            WHERE COALESCE(origem, 'lote') = 'totem'
-              AND prioridade = ?
-              AND status IN ('aguardando', 'aberto')
-              AND COALESCE(data_execucao, substr(hora, 1, 10)) = (
-                  SELECT COALESCE(data_execucao, substr(hora, 1, 10))
-                  FROM senha
-                  WHERE COALESCE(origem, 'lote') = 'totem'
-                    AND prioridade = ?
-                    AND status IN ('aguardando', 'aberto')
-                  ORDER BY COALESCE(data_execucao, substr(hora, 1, 10)) DESC, senha ASC
-                  LIMIT 1
-              )
-            """,
-            (prioridade, prioridade),
-        ).fetchone()
-    return int(row["total"]) if row and row["total"] is not None else 0
-
-
-def excluir_remanescentes_totem(prioridade: str) -> int:
-    """Remove senhas remanescentes do totem da mesma prioridade na data ativa."""
-    prioridade = _normalizar_prioridade(prioridade)
-    with conectar() as conn:
-        data_ref = conn.execute(
-            """
-            SELECT COALESCE(data_execucao, substr(hora, 1, 10)) AS data_ref
-            FROM senha
-            WHERE COALESCE(origem, 'lote') = 'totem'
-              AND prioridade = ?
-              AND status IN ('aguardando', 'aberto')
-            ORDER BY data_ref DESC, senha ASC
-            LIMIT 1
-            """,
-            (prioridade,),
-        ).fetchone()
-        if not data_ref or not data_ref["data_ref"]:
-            return 0
-
-        cursor = conn.execute(
-            """
-            DELETE FROM senha
-            WHERE COALESCE(origem, 'lote') = 'totem'
-              AND prioridade = ?
-              AND status IN ('aguardando', 'aberto')
-              AND COALESCE(data_execucao, substr(hora, 1, 10)) = ?
-            """,
-            (prioridade, data_ref["data_ref"]),
-        )
-        conn.commit()
-    return cursor.rowcount
+    return identificador, numero, nome
 
 
 def definir_origem_padrao(origem: str) -> None:
@@ -708,14 +691,6 @@ def _obter_data_ativa_por_origem(origem: str) -> str | None:
         ).fetchone()
     return row["data_ref"] if row and row["data_ref"] else None
 
-
-def _normalizar_prioridade(prioridade: str) -> str:
-    return "preferencial" if (prioridade or "").strip().lower() == "preferencial" else "normal"
-
-
-def _chave_contador_totem(prioridade: str) -> str:
-    prioridade = _normalizar_prioridade(prioridade)
-    return f"contador_totem_{prioridade}"
 
 def obter_senha_por_id(identificador: int):
     """Busca uma senha especifica por ID."""

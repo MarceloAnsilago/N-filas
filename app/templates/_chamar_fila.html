@@ -17,9 +17,9 @@
         {% if aguardando %}
           <div class="fila-totem-lista">
             {% for item in aguardando %}
-              <div class="fila-totem-card {{ item.prioridade }}">
+              <div class="fila-totem-card {{ item.prioridade if item.prioridade in ('normal', 'preferencial') else '' }}">
                 <div class="fila-totem-numero">{{ "%03d"|format(item.senha) }}</div>
-                <div class="fila-totem-modalidade">{{ prioridade_labels.get(item.prioridade, item.prioridade) }}</div>
+                <div class="fila-totem-modalidade">{{ nome_atendimento(item.prioridade) }}</div>
                 <div class="fila-totem-meta">
                   <strong>{{ item.unidade }}</strong>
                   <span>Data {{ item.data_execucao or data_producao or "-" }}</span>

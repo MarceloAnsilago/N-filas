@@ -33,6 +33,12 @@ class MultiUnidadeTests(unittest.TestCase):
             client.post("/login", data={"login": name, "senha": "senha-teste", "form_token": self.token(client, "/login")})
         return result
 
+    def configurar_atendimento(self, unidade_id, acao="cadastrar_atendimento", **dados):
+        route = f"/admin?unidade_painel={unidade_id}&aba=senhas"
+        return self.administrator.post(route, data={
+            "acao": acao, "form_token": self.token(self.administrator, route), **dados
+        }, follow_redirects=True)
+
     def test_generation_and_emission_use_authenticated_unit(self):
         self.register(self.a, "Unidade real", "real")
         page = self.a.get("/gerar").get_data(as_text=True)
@@ -40,7 +46,8 @@ class MultiUnidadeTests(unittest.TestCase):
         self.assertEqual(self.a.post("/gerar/salvar-unidade", data={"unidade": "Outra"}).status_code, 404)
         response = self.a.post("/gerar", data={"unidade": "Outra", "senha_inicial": "1", "senha_final": "1", "data_execucao": "2026-11-04"})
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(self.a.post("/senhas/emitir/normal", data={"unidade": "Outra"}).get_json()["ok"])
+        self.configurar_atendimento(2, nome_atendimento="Recepção")
+        self.assertTrue(self.a.post("/senhas/emitir/1", data={"unidade": "Outra"}).get_json()["ok"])
         with self.app.app_context(), db.conectar() as conn:
             self.assertEqual({row["unidade"] for row in conn.execute("SELECT unidade FROM senha")}, {"Unidade real"})
 
@@ -178,28 +185,50 @@ class MultiUnidadeTests(unittest.TestCase):
     def test_two_units_isolate_numbers_calls_events(self):
         self.register(self.a, "São Miguel", "saomiguel")
         self.register(self.b, "Santana", "santana")
+        self.configurar_atendimento(2, nome_atendimento="Recepção")
+        self.configurar_atendimento(3, nome_atendimento="Vacinação")
         stream_a = self.a.get("/painel/events", buffered=False)
         stream_b = self.b.get("/painel/events", buffered=False)
         self.addCleanup(stream_a.close)
         self.addCleanup(stream_b.close)
         initial_b = next(iter(stream_b.response)).decode()
         self.assertIn('"senha_atual": null', initial_b)
-        emitted_a = self.a.post("/senhas/emitir/normal").get_json()
-        emitted_b = self.b.post("/senhas/emitir/normal").get_json()
+        emitted_a = self.a.post("/senhas/emitir/1").get_json()
+        emitted_b = self.b.post("/senhas/emitir/1").get_json()
         self.assertTrue(emitted_a["ok"])
         self.assertEqual(emitted_a["senha"], emitted_b["senha"])
         self.a.post("/chamar", data={"acao": "chamar", "terminal": "1", "usuario": "Operador A"})
         status_a = self.a.get("/painel/status").get_json()
         status_b = self.b.get("/painel/status").get_json()
         self.assertEqual(status_a["senha_atual"]["unidade"], "São Miguel")
+        self.assertEqual(status_a["senha_atual"]["atendimento"], "Recepção")
         self.assertIsNone(status_b["senha_atual"])
         self.assertEqual(status_b["proximas_senhas"][0]["unidade"], "Santana")
+        self.assertEqual(status_b["proximas_senhas"][0]["atendimento"], "Vacinação")
         events = self.app.extensions["unidades_events"]
         self.assertEqual(events[2].revision, 2)
         self.assertEqual(events[3].revision, 1)
         # Mesmo com IDs iguais nos bancos, uma tentativa de encerrar nao afeta a outra unidade.
         self.b.post("/historico", data={"encerrar_id": emitted_a["id"], "acao": "compareceu"})
         self.assertEqual(self.a.get("/painel/status").get_json()["senha_atual"]["status"], "aberto")
+
+    def test_only_active_configured_services_are_offered(self):
+        self.register(self.a, "Unidade A", "a")
+        self.register(self.b, "Unidade B", "b")
+        self.assertNotIn("data-issue-url=", self.a.get("/senhas").get_data(as_text=True))
+        self.assertEqual(self.a.post("/senhas/emitir/normal").status_code, 404)
+        self.configurar_atendimento(2, nome_atendimento="  Saúde   Bucal ")
+        duplicate = self.configurar_atendimento(2, nome_atendimento="SAÚDE BUCAL")
+        self.assertIn("Já existe um atendimento com esse nome.", duplicate.get_data(as_text=True))
+        self.assertIn("Saúde Bucal", self.a.get("/senhas").get_data(as_text=True))
+        self.assertEqual(self.b.post("/senhas/emitir/1").status_code, 404)
+        self.assertEqual(self.a.post("/senhas/emitir/1").get_json()["senha"], "001")
+        self.configurar_atendimento(2, "desativar_atendimento", atendimento_id=1)
+        self.assertNotIn("Saúde Bucal", self.a.get("/senhas").get_data(as_text=True))
+        self.assertEqual(self.a.post("/senhas/emitir/1").status_code, 404)
+        self.assertIn("Saúde Bucal", self.a.get("/chamar?fragment=fila").get_data(as_text=True))
+        self.configurar_atendimento(2, "ativar_atendimento", atendimento_id=1)
+        self.assertEqual(self.a.post("/senhas/emitir/1").get_json()["senha"], "002")
 
     def test_first_unit_keeps_existing_data_and_duplicate_registration_preserves_it(self):
         with self.app.app_context():
@@ -212,6 +241,16 @@ class MultiUnidadeTests(unittest.TestCase):
         self.assertIn("ja esta em uso", self.register(anonymous, "SÃO MIGUEL", "saomiguel").get_data(as_text=True))
         with self.app.app_context(), accounts() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM unidade_login").fetchone()[0], 3)
+
+    def test_new_sequence_continues_after_existing_totem_tickets(self):
+        with self.app.app_context():
+            db.inserir_senha(145, "Unidade antiga", origem="totem")
+            db.definir_origem_padrao("totem")
+        self.register(self.a, "Unidade A", "a")
+        self.configurar_atendimento(2, nome_atendimento="Recepção")
+        self.assertEqual(self.a.post("/senhas/emitir/1").get_json()["senha"], "146")
+        proximas = self.a.get("/painel/status").get_json()["proximas_senhas"]
+        self.assertEqual([senha["senha"] for senha in proximas], [145, 146])
 
 
 if __name__ == "__main__":
