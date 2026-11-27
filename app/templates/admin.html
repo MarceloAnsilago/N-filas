@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Administração | Gfilas</title>
+  {% if aba == 'senhas' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/botao-atendimento.css') }}">
+  {% endif %}
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; background: #f6f8fc; color: #172033; font-family: system-ui, sans-serif; }
@@ -48,8 +51,8 @@
     h2 { margin: 0 0 10px; font-size: 1.15rem; }
     .card p { margin: 0; color: #526078; line-height: 1.6; }
     .open { display: inline-block; margin-top: 20px; color: #2563eb; font-weight: 600; }
-    .service-list { list-style: none; padding: 0; }
-    .service-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #dce3ef; }
+    .service-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 24px; list-style: none; padding: 0; }
+    .service-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
   </style>
 </head>
 <body>
@@ -115,16 +118,21 @@
             <button class="primary" type="submit" name="acao" value="cadastrar_atendimento">Adicionar atendimento</button>
           </form>
           {% if atendimentos %}
-          <ul class="service-list" aria-label="Atendimentos cadastrados">
+          <ul class="service-list" aria-label="Prévia dos botões do totem">
             {% for atendimento in atendimentos %}
             <li>
-              <div><strong>{{ atendimento.nome }}</strong> · {{ 'Ativo' if atendimento.ativo else 'Inativo' }}</div>
-              <form method="post" action="{{ url_atendimentos }}">
-                <input type="hidden" name="form_token" value="{{ form_token }}">
-                <input type="hidden" name="atendimento_id" value="{{ atendimento.id }}">
-                <button type="submit" name="acao" value="{{ 'desativar_atendimento' if atendimento.ativo else 'ativar_atendimento' }}"
-                        aria-label="{{ 'Desativar' if atendimento.ativo else 'Ativar' }} {{ atendimento.nome }}">{{ 'Desativar' if atendimento.ativo else 'Ativar' }}</button>
-              </form>
+              {% with previa = true %}
+              {% include "_botao_atendimento.html" %}
+              {% endwith %}
+              <div class="service-controls">
+                <span>{{ 'Ativo' if atendimento.ativo else 'Inativo' }}</span>
+                <form method="post" action="{{ url_atendimentos }}">
+                  <input type="hidden" name="form_token" value="{{ form_token }}">
+                  <input type="hidden" name="atendimento_id" value="{{ atendimento.id }}">
+                  <button type="submit" name="acao" value="{{ 'desativar_atendimento' if atendimento.ativo else 'ativar_atendimento' }}"
+                          aria-label="{{ 'Desativar' if atendimento.ativo else 'Ativar' }} {{ atendimento.nome }}">{{ 'Desativar' if atendimento.ativo else 'Ativar' }}</button>
+                </form>
+              </div>
             </li>
             {% endfor %}
           </ul>

@@ -1,0 +1,48 @@
+.ticket-button {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: clamp(320px, 43vh, 540px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #608dff;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #1d4ed8, #172e75);
+  color: #fff;
+  font: 400 1rem "Segoe UI", sans-serif;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.ticket-button:disabled { cursor: default; }
+.ticket-button svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ticket-button-body { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 24px; padding: clamp(28px, 4vw, 56px); }
+.ticket-button-icon { box-sizing: border-box; width: 100px; height: 100px; display: grid; place-items: center; border: 1px solid #ffffff40; border-radius: 26px; background: #ffffff18; }
+.ticket-button-icon svg { width: 64px; height: 64px; }
+.ticket-button-title { font-size: clamp(2rem, 3.4vw, 3.2rem); font-weight: 700; letter-spacing: -.03em; line-height: 1.2; overflow-wrap: anywhere; min-width: 0; }
+.ticket-button-footer { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 76px; padding: 22px 32px; background: #ffffff18; font-size: 1.1rem; font-weight: 700; }
+.ticket-button-footer svg { width: 20px; height: 20px; transition: transform .18s ease; }
+.ticket-button:enabled:active { transform: scale(.985); }
+
+@media (hover: hover) {
+  .ticket-button:enabled:hover { transform: translateY(-4px); box-shadow: 0 14px 32px #2563eb40; }
+  .ticket-button:enabled:hover .ticket-button-footer svg { transform: translateX(4px); }
+}
+
+@media (max-width: 600px) {
+  .ticket-button { min-height: 230px; border-radius: 18px; }
+  .ticket-button-body { display: grid; grid-template-columns: auto 1fr; gap: 12px 18px; align-items: center; padding: 26px 20px; }
+  .ticket-button-icon { width: 72px; height: 72px; border-radius: 20px; }
+  .ticket-button-icon svg { width: 46px; height: 46px; }
+  .ticket-button-title { font-size: clamp(1.3rem, 5vw, 1.8rem); }
+  .ticket-button-footer { min-height: 64px; padding: 18px 20px; font-size: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket-button, .ticket-button-footer svg { transition: none; transform: none !important; }
+}

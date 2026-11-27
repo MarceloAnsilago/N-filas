@@ -1,0 +1,18 @@
+<button type="button" class="ticket-button"{% if previa %} disabled{% else %} data-issue-url="{{ url_for('web.emitir_senha', atendimento_id=atendimento.id) }}"{% endif %}>
+  <span class="ticket-button-body">
+    <span class="ticket-button-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <circle cx="12" cy="7.5" r="3.5"></circle>
+        <path d="M7.5 18v-1.4A4.6 4.6 0 0 1 12 12h0a4.6 4.6 0 0 1 4.5 4.6V18"></path>
+      </svg>
+    </span>
+    <span class="ticket-button-title">{{ atendimento.nome }}</span>
+  </span>
+  <span class="ticket-button-footer">
+    <span>Toque para emitir sua senha</span>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 12h14"></path>
+      <path d="m13 6 6 6-6 6"></path>
+    </svg>
+  </span>
+</button>
