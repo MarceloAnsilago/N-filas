@@ -1,0 +1,11 @@
+[Unit]
+Description=Consultar atualizações do Nfilas a cada dois minutos
+
+[Timer]
+OnCalendar=*-*-* *:00/2:00
+AccuracySec=1s
+Persistent=true
+Unit=nfilas-deploy.service
+
+[Install]
+WantedBy=timers.target

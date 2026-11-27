@@ -1,0 +1,1 @@
+nfilas ALL=(root) NOPASSWD: /usr/bin/systemctl stop nfilas.service, /usr/bin/systemctl start nfilas.service

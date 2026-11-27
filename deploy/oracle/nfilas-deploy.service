@@ -1,0 +1,14 @@
+[Unit]
+Description=Consultar e publicar a revisão aprovada do Nfilas
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=nfilas
+Group=nfilas
+WorkingDirectory=/opt/nfilas
+Environment=GIT_TERMINAL_PROMPT=0
+UMask=0077
+TimeoutStartSec=15min
+ExecStart=/usr/bin/python3.12 -I /usr/local/lib/nfilas-deploy/deploy.py deploy
