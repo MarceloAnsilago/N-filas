@@ -14,7 +14,7 @@
     .intro { color: #526078; margin: 0 0 24px; }
     .unit-panel { margin-top: 16px; padding-top: 16px; border-top: 1px solid #dce3ef; }
     .unit-panel h3 { margin: 0; font-size: 1rem; }
-    .panel-tabs { display: flex; gap: 8px; margin-top: 12px; border-bottom: 1px solid #dce3ef; }
+    .panel-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; border-bottom: 1px solid #dce3ef; }
     .panel-tabs a { padding: 10px 14px; color: #526078; text-decoration: none; border-bottom: 3px solid transparent; }
     .panel-tabs a:hover, .panel-tabs a[aria-current="page"] { color: #2563eb; }
     .panel-tabs a[aria-current="page"] { border-bottom-color: #2563eb; font-weight: 600; }
@@ -85,19 +85,32 @@
       <article class="card" id="unidade-{{ unidade.id }}" style="margin-top: 12px;">
         <h2>{{ unidade.nome }}</h2>
         <p>Login: <strong>{{ unidade.login }}</strong></p>
+        {% set personalizando = unidade.id == unidade_painel %}
+        <nav class="panel-tabs" aria-label="Personalização de {{ unidade.nome }}">
+          <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if personalizando and aba != 'senhas' %} aria-current="page"{% endif %}>Personalizar painel</a>
+          <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='senhas', _anchor='unidade-' ~ unidade.id) }}"{% if personalizando and aba == 'senhas' %} aria-current="page"{% endif %}>Personalizar senhas</a>
+        </nav>
         {% if unidade.id == unidade_painel %}
         <section class="unit-panel" aria-labelledby="painel-titulo-{{ unidade.id }}">
-          <h3 id="painel-titulo-{{ unidade.id }}">Personalizar painel</h3>
+          <h3 id="painel-titulo-{{ unidade.id }}">{{ 'Tela de emissão de senhas' if aba == 'senhas' else 'Opções do painel' }}</h3>
+          {% if aba != 'senhas' %}
           <nav class="panel-tabs" aria-label="Opções de personalização do painel">
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if aba is none %} aria-current="page"{% endif %}>Cores</a>
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'logo' %} aria-current="page"{% endif %}>Logo</a>
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'link' %} aria-current="page"{% endif %}>Mídia</a>
             <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='tempo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'tempo' %} aria-current="page"{% endif %}>Tempo</a>
           </nav>
+          {% endif %}
           {% for message in mensagens %}
           <p class="notice" role="alert">{{ message }}</p>
           {% endfor %}
-          {% if aba == 'logo' %}
+          {% if aba == 'senhas' %}
+          <p>Para abrir a tela de emissão de senhas, entre com o login <strong>{{ unidade.login }}</strong>.</p>
+          <div class="color-actions">
+            <a class="open" href="{{ url_for('web.senhas') }}">Abrir tela de senhas</a>
+            <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+          </div>
+          {% elif aba == 'logo' %}
           <div class="logo-section">
             {% if not logo %}<p id="logo-padrao">O painel usa o logo padrão.</p>{% endif %}
             <div class="logo-preview" id="logo-previa"{% if not logo %} hidden{% endif %}>
@@ -203,8 +216,6 @@
           </form>
           {% endif %}
         </section>
-        {% else %}
-        <a class="open" href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}">Personalizar painel</a>
         {% endif %}
       </article>
       {% else %}<p>Nenhuma unidade cadastrada.</p>{% endfor %}

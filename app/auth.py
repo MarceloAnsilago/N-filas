@@ -178,7 +178,7 @@ def login_page(admin_only):
 def admin_page():
     unidade_painel = request.args.get("unidade_painel", type=int)
     aba = request.args.get("aba")
-    if aba not in {"logo", "link", "tempo"}:
+    if aba not in {"logo", "link", "tempo", "senhas"}:
         aba = None
     with accounts() as conn:
         if "unidade_painel" in request.args:
@@ -200,7 +200,7 @@ def admin_page():
                 return redirect(destino)
             if not valid_form():
                 flash("Atualize a página e tente novamente.", "warning")
-            elif acao in {"salvar_cores", "restaurar_cores"}:
+            elif aba != "senhas" and acao in {"salvar_cores", "restaurar_cores"}:
                 cores = {} if acao == "restaurar_cores" else painel_cores.validar_cores(request.form)
                 if cores is None:
                     flash("Informe uma cor válida para cada item.", "warning")
