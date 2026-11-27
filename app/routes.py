@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 from flask import Blueprint, flash, redirect, render_template, request, url_for, session, jsonify, Response, current_app, g
 
 from . import db, painel_youtube
-from .auth import cores_painel_da_unidade, obter_link_painel, obter_local_tempo, obter_logo_painel
+from .auth import active_unit, cores_painel_da_unidade, obter_link_painel, obter_local_tempo, obter_logo_painel
 
 logger = logging.getLogger(__name__)
 
@@ -457,6 +457,8 @@ def painel_events():
     app = current_app._get_current_object()
     events = g.get("painel_events", app.extensions["painel_events"])
     db_path = g.get("db_path")
+    unit_id = session.get("unidade_id")
+    admin_version = session.get("admin_versao")
 
     def load_snapshot():
         # Apenas a leitura precisa do contexto; nao retem a requisicao
@@ -466,8 +468,16 @@ def painel_events():
                 g.db_path = db_path
             return db.obter_painel_status_snapshot(MAX_PAINEL_ULTIMAS)
 
+    def authorized_stream():
+        for event in events.stream(load_snapshot):
+            if unit_id is not None and not event.startswith(":"):
+                with app.app_context():
+                    if active_unit(unit_id, admin_version) is None:
+                        return
+            yield event
+
     return Response(
-        events.stream(load_snapshot),
+        authorized_stream(),
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )

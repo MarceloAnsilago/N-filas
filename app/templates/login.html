@@ -21,8 +21,8 @@
 <body>
   <main>
     <div class="brand">GFILAS</div>
-    <h1>{{ "Entrar no admin" if admin_only else "Entrar na unidade" }}</h1>
-    <p>{{ "Informe o login e a senha do administrador." if admin_only else "Escolha sua unidade e digite a senha." }}</p>
+    <h1>{{ "Entrar no Super Admin" if admin_only else ("Entrar na administração do estabelecimento" if unit_admin else "Entrar na unidade") }}</h1>
+    <p>{{ "Informe o login e a senha do Super Admin." if admin_only else "Escolha sua unidade e digite a senha." }}</p>
     {% for category, message in get_flashed_messages(with_categories=true) %}
       <p class="notice" role="alert">{{ message }}</p>
     {% endfor %}
@@ -39,12 +39,15 @@
         <option value="{{ unidade.login }}" {% if request.form.get('login', '')|trim|lower == unidade.login %}selected{% endif %}>{{ unidade.nome }}</option>
         {% endfor %}
       </select>
-      {% if not unidades %}<p class="notice">Nenhuma unidade cadastrada. Solicite o cadastro ao administrador.</p>{% endif %}
+      {% if not unidades %}<p class="notice">{{ 'Nenhum estabelecimento com acesso administrativo ativo. Solicite o acesso ao Super Admin.' if unit_admin else 'Nenhuma unidade cadastrada. Solicite o cadastro ao administrador.' }}</p>{% endif %}
       {% endif %}
       <label for="senha">Senha</label>
       <input id="senha" name="senha" type="password" required autocomplete="current-password">
       <button type="submit" {% if not admin_only and not unidades %}disabled{% endif %}>Entrar</button>
     </form>
+    {% if not admin_only %}
+      <p><a href="{{ url_for('auth.login' if unit_admin else 'auth.unit_admin_login') }}">{{ 'Login de balcão e TV' if unit_admin else 'Administração do estabelecimento' }}</a></p>
+    {% endif %}
 
   </main>
 </body>

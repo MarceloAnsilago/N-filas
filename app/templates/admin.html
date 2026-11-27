@@ -67,7 +67,18 @@
     <h1>Administração</h1>
   </header>
   <main>
-    <p class="intro">Cadastre as unidades e defina os logins de acesso.</p>
+    {% if super_admin %}
+    <p class="intro">Cadastre estabelecimentos e gerencie o acesso administrativo de cada um.</p>
+    {% else %}
+    <nav class="panel-tabs" aria-label="Operação do estabelecimento">
+      <a href="{{ url_for('web.chamar') }}">Chamar</a>
+      <a href="{{ url_for('web.gerar_senhas') }}">Gerar senhas</a>
+      <a href="{{ url_for('web.senhas') }}">Totem</a>
+      <a href="{{ url_for('web.painel') }}">Painel</a>
+      <a href="{{ url_for('web.historico') }}">Histórico</a>
+      <a href="{{ url_for('auth.change_password') }}">Trocar senha administrativa</a>
+    </nav>
+    {% endif %}
     <form method="post" action="{{ url_for('auth.logout') }}">
       <input type="hidden" name="form_token" value="{{ auth_form_token() }}">
       <button type="submit">Sair</button>
@@ -78,45 +89,56 @@
     <p class="notice" role="alert">{{ message }}</p>
     {% endfor %}
     {% endif %}
+    {% if super_admin %}
     <section class="card" style="margin: 24px 0;">
-      <h2>Cadastrar unidade</h2>
-      <form method="post" action="{{ url_for('web.admin') }}">
+      <h2>Cadastrar estabelecimento</h2>
+      <form method="post" action="{{ url_for(admin_endpoint) }}">
         <input type="hidden" name="form_token" value="{{ form_token }}">
-        <label for="nome">Nome da unidade</label>
+        <label for="nome">Nome do estabelecimento</label>
         <input id="nome" name="nome" required maxlength="100" autocomplete="organization" value="{{ request.form.get('nome', '') }}">
         <p>O nome da unidade também será o login de acesso.</p>
-        <label for="senha">Senha da unidade</label>
-        <input id="senha" name="senha" type="password" required autocomplete="new-password">
-        <button type="submit" class="primary">Cadastrar unidade</button>
+        <label for="senha">Senha para balcão e TV (opcional)</label>
+        <input id="senha" name="senha" type="password" autocomplete="new-password">
+        <button type="submit" class="primary">Cadastrar estabelecimento</button>
       </form>
     </section>
+    {% endif %}
     <section style="margin-bottom: 32px;">
-      <h2>Unidades cadastradas</h2>
+      {% if super_admin %}<h2>Estabelecimentos cadastrados</h2>{% endif %}
       {% for unidade in unidades %}
       <article class="card" id="unidade-{{ unidade.id }}" style="margin-top: 12px;">
         <h2>{{ unidade.nome }}</h2>
         <p>Login: <strong>{{ unidade.login }}</strong></p>
+        {% if super_admin %}
+        <p>{{ 'Ativo' if unidade.ativo else 'Desativado' }}</p>
+        <form method="post" action="{{ url_for(admin_endpoint) }}">
+          <input type="hidden" name="form_token" value="{{ form_token }}">
+          <input type="hidden" name="unidade_id" value="{{ unidade.id }}">
+          <button type="submit" name="acao" value="gerar_senha_admin">{{ 'Redefinir senha administrativa' if unidade.tem_admin else 'Gerar senha administrativa' }}</button>
+          <button type="submit" name="acao" value="{{ 'desativar_unidade' if unidade.ativo else 'ativar_unidade' }}">{{ 'Desativar acesso' if unidade.ativo else 'Ativar acesso' }}</button>
+        </form>
+        {% endif %}
         {% set personalizando = unidade.id == unidade_painel %}
         <nav class="panel-tabs" aria-label="Personalização de {{ unidade.nome }}">
-          <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if personalizando and aba != 'senhas' %} aria-current="page"{% endif %}>Personalizar painel</a>
-          <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='senhas', _anchor='unidade-' ~ unidade.id) }}"{% if personalizando and aba == 'senhas' %} aria-current="page"{% endif %}>Personalizar senhas</a>
+          <a href="{{ url_for(admin_endpoint, unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if personalizando and aba != 'senhas' %} aria-current="page"{% endif %}>Personalizar painel</a>
+          <a href="{{ url_for(admin_endpoint, unidade_painel=unidade.id, aba='senhas', _anchor='unidade-' ~ unidade.id) }}"{% if personalizando and aba == 'senhas' %} aria-current="page"{% endif %}>Personalizar senhas</a>
         </nav>
         {% if unidade.id == unidade_painel %}
         <section class="unit-panel" aria-labelledby="painel-titulo-{{ unidade.id }}">
           <h3 id="painel-titulo-{{ unidade.id }}">{{ 'Tela de emissão de senhas' if aba == 'senhas' else 'Opções do painel' }}</h3>
           {% if aba != 'senhas' %}
           <nav class="panel-tabs" aria-label="Opções de personalização do painel">
-            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if aba is none %} aria-current="page"{% endif %}>Cores</a>
-            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'logo' %} aria-current="page"{% endif %}>Logo</a>
-            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'link' %} aria-current="page"{% endif %}>Mídia</a>
-            <a href="{{ url_for('web.admin', unidade_painel=unidade.id, aba='tempo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'tempo' %} aria-current="page"{% endif %}>Tempo</a>
+            <a href="{{ url_for(admin_endpoint, unidade_painel=unidade.id, _anchor='unidade-' ~ unidade.id) }}"{% if aba is none %} aria-current="page"{% endif %}>Cores</a>
+            <a href="{{ url_for(admin_endpoint, unidade_painel=unidade.id, aba='logo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'logo' %} aria-current="page"{% endif %}>Logo</a>
+            <a href="{{ url_for(admin_endpoint, unidade_painel=unidade.id, aba='link', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'link' %} aria-current="page"{% endif %}>Mídia</a>
+            <a href="{{ url_for(admin_endpoint, unidade_painel=unidade.id, aba='tempo', _anchor='unidade-' ~ unidade.id) }}"{% if aba == 'tempo' %} aria-current="page"{% endif %}>Tempo</a>
           </nav>
           {% endif %}
           {% for message in mensagens %}
           <p class="notice" role="alert">{{ message }}</p>
           {% endfor %}
           {% if aba == 'senhas' %}
-          {% set url_atendimentos = url_for('web.admin', unidade_painel=unidade.id, aba='senhas') %}
+          {% set url_atendimentos = url_for(admin_endpoint, unidade_painel=unidade.id, aba='senhas') %}
           <form method="post" action="{{ url_atendimentos }}">
             <input type="hidden" name="form_token" value="{{ form_token }}">
             <label for="nome-atendimento">Nome do atendimento</label>
@@ -166,7 +188,7 @@
           <p>Para abrir a tela de emissão de senhas, entre com o login <strong>{{ unidade.login }}</strong>.</p>
           <div class="color-actions">
             <a class="open" href="{{ url_for('web.senhas') }}">Abrir tela de senhas</a>
-            <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+            <a class="open" href="{{ url_for(admin_endpoint, _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
           </div>
           {% elif aba == 'logo' %}
           <div class="logo-section">
@@ -175,7 +197,7 @@
               <img id="logo-imagem"{% if logo %} src="{{ logo.url }}"{% endif %} alt="Prévia do logo de {{ unidade.nome }}"
                    style="width: {{ logo.largura if logo else 100 }}%; height: {{ logo.altura if logo else 100 }}%; object-fit: {{ 'fill' if logo and logo.esticar else 'contain' }};">
             </div>
-            <form id="logo-form" method="post" enctype="multipart/form-data" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='logo') }}">
+            <form id="logo-form" method="post" enctype="multipart/form-data" action="{{ url_for(admin_endpoint, unidade_painel=unidade.id, aba='logo') }}">
               <input type="hidden" name="form_token" value="{{ form_token }}">
               <label for="logo-{{ unidade.id }}">Imagem para o cabeçalho</label>
               <input id="logo-{{ unidade.id }}" name="logo" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="logo-formatos">
@@ -190,13 +212,13 @@
               <div class="color-actions">
                 <button class="primary" type="submit" name="acao" value="salvar_logo">Salvar logo</button>
                 {% if logo %}<button type="submit" name="acao" value="remover_logo">Restaurar logo padrão</button>{% endif %}
-                <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+                <a class="open" href="{{ url_for(admin_endpoint, _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
               </div>
             </form>
             <script src="{{ url_for('static', filename='js/admin-logo.js') }}" defer></script>
           </div>
           {% elif aba == 'tempo' %}
-            <form id="admin-weather" method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='tempo') }}"
+            <form id="admin-weather" method="post" action="{{ url_for(admin_endpoint, unidade_painel=unidade.id, aba='tempo') }}"
                   data-catalog="{{ url_for('static', filename='municipios.json') }}">
               <input type="hidden" name="form_token" value="{{ form_token }}">
               <label for="weather-uf">Estado</label>
@@ -224,7 +246,7 @@
               <label><input type="radio" name="media-source" value="youtube" checked> YouTube</label>
               <label><input type="radio" name="media-source" value="folder"> Pasta no PC</label>
             </fieldset>
-            <form id="admin-media-youtube" method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id, aba='link') }}">
+            <form id="admin-media-youtube" method="post" action="{{ url_for(admin_endpoint, unidade_painel=unidade.id, aba='link') }}">
               <input type="hidden" name="form_token" value="{{ form_token }}">
               <label for="link-youtube-{{ unidade.id }}">Link do vídeo ou da playlist do YouTube</label>
               <input id="link-youtube-{{ unidade.id }}" name="link_youtube" type="url" maxlength="2048"
@@ -250,11 +272,11 @@
             <div class="color-actions">
               <a class="open" href="{{ url_for('web.painel') }}">Abrir painel</a>
               <a class="open" href="{{ url_for('web.painel_compacto') }}">Abrir painel compacto</a>
-              <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+              <a class="open" href="{{ url_for(admin_endpoint, _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
             </div>
           </div>
           {% else %}
-          <form method="post" action="{{ url_for('web.admin', unidade_painel=unidade.id) }}">
+          <form method="post" action="{{ url_for(admin_endpoint, unidade_painel=unidade.id) }}">
             <input type="hidden" name="form_token" value="{{ form_token }}">
             <datalist id="paleta-painel">
               {% for cor in ['#ffffff', '#f1f5f9', '#020617', '#032241', '#075bff', '#00a3d7', '#00866e', '#8b5cf6', '#ffb62d', '#dc2626'] %}
@@ -269,7 +291,7 @@
             <div class="color-actions">
               <button type="submit" class="primary" name="acao" value="salvar_cores">Salvar cores</button>
               <button type="submit" name="acao" value="restaurar_cores">Restaurar cores padrão</button>
-              <a class="open" href="{{ url_for('web.admin', _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
+              <a class="open" href="{{ url_for(admin_endpoint, _anchor='unidade-' ~ unidade.id) }}">Fechar personalização</a>
             </div>
           </form>
           {% endif %}

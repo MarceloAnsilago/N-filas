@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Senha temporária | Super Admin{% endblock %}
+{% block content %}
+<section class="card p-4">
+  <h1 class="h3">Senha temporária</h1>
+  <p>Guarde estes dados antes de voltar e repasse-os ao responsável. A senha é exibida nesta tela e precisa ser trocada no primeiro acesso.</p>
+  <dl>
+    <dt>Login</dt>
+    <dd>{{ login }}</dd>
+    <dt>Senha temporária</dt>
+    <dd><code id="senha-temporaria">{{ senha }}</code></dd>
+    <dt>Página de acesso</dt>
+    <dd><a href="{{ url_for('auth.unit_admin_login') }}">{{ url_for('auth.unit_admin_login', _external=true) }}</a></dd>
+  </dl>
+  <a href="{{ url_for('web.admin') }}">Voltar ao Super Admin</a>
+</section>
+{% endblock %}

@@ -69,6 +69,14 @@ def init_auth(app):
                 SELECT id, nome, login, senha_hash, legacy, is_admin FROM unidade_login_anterior
             """)
             conn.execute("DROP TABLE unidade_login_anterior")
+        for column, definition in (
+            ("admin_senha_hash", "TEXT"),
+            ("admin_temporaria", "INTEGER NOT NULL DEFAULT 0"),
+            ("admin_versao", "INTEGER NOT NULL DEFAULT 0"),
+            ("ativo", "INTEGER NOT NULL DEFAULT 1"),
+        ):
+            if column not in columns or "print_token" in columns:
+                conn.execute(f"ALTER TABLE unidade_login ADD COLUMN {column} {definition}")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS painel_cor (
                 unidade_id INTEGER NOT NULL, item TEXT NOT NULL, cor TEXT NOT NULL,
@@ -108,19 +116,36 @@ def private_response(response):
     return response
 
 
-def require_unit():
-    if request.endpoint in {"auth.login", "auth.admin_login", "static"} or request.endpoint is None:
-        return None
+def active_unit(unit_id, admin_version):
     with accounts() as conn:
-        unit = conn.execute("SELECT * FROM unidade_login WHERE id = ?", (session.get("unidade_id"),)).fetchone()
+        unit = conn.execute("SELECT * FROM unidade_login WHERE id = ? AND ativo = 1", (unit_id,)).fetchone()
+    if unit and (admin_version is None or admin_version == unit["admin_versao"]):
+        return unit
+
+
+def require_unit():
+    if request.endpoint in {"auth.login", "auth.admin_login", "auth.unit_admin_login", "static"} or request.endpoint is None:
+        return None
+    admin_version = session.get("admin_versao")
+    unit_admin = admin_version is not None
+    unit = active_unit(session.get("unidade_id"), admin_version)
     if unit is None:
         session.clear()
         if request.path.endswith(("/status", "/events")) or request.method != "GET":
             return jsonify(ok=False, message="Entre com o login da unidade."), 401
-        return redirect(url_for("auth.admin_login") if request.endpoint == "web.admin" else url_for("auth.login", next=request.full_path))
+        if request.endpoint == "web.admin":
+            return redirect(url_for("auth.admin_login"))
+        if unit_admin or request.endpoint in {"auth.unit_admin", "auth.change_password"}:
+            return redirect(url_for("auth.unit_admin_login"))
+        return redirect(url_for("auth.login", next=request.full_path))
     select_unit(unit)
+    g.unit_admin = unit_admin
     if request.endpoint == "web.admin" and not unit["is_admin"]:
         return redirect(url_for("auth.admin_login"))
+    if request.endpoint in {"auth.unit_admin", "auth.change_password"} and not unit_admin:
+        return redirect(url_for("auth.unit_admin_login"))
+    if unit_admin and unit["admin_temporaria"] and request.endpoint not in {"auth.change_password", "auth.logout"}:
+        return redirect(url_for("auth.change_password"), code=303)
     if unit["is_admin"] and request.endpoint not in {"web.admin", "auth.logo_painel", "auth.logout"}:
         if request.path.endswith(("/status", "/events")) or request.method != "GET":
             return jsonify(ok=False, message="Entre com o login da unidade."), 401
@@ -147,7 +172,12 @@ def admin_login():
     return login_page(admin_only=True)
 
 
-def login_page(admin_only):
+@bp.route("/unidade/admin/login", methods=["GET", "POST"])
+def unit_admin_login():
+    return login_page(admin_only=False, unit_admin=True)
+
+
+def login_page(admin_only, unit_admin=False):
     if request.method == "POST":
         if not valid_form():
             flash("Atualize a pagina e tente novamente.", "warning")
@@ -155,7 +185,11 @@ def login_page(admin_only):
             username = (request.form.get("login") or "").strip().lower()
             with accounts() as conn:
                 unit = conn.execute("SELECT * FROM unidade_login WHERE login = ?", (username,)).fetchone()
-            if unit and bool(unit["is_admin"]) == admin_only and check_password_hash(unit["senha_hash"], request.form.get("senha") or ""):
+            password_hash = unit["admin_senha_hash" if unit_admin else "senha_hash"] if unit else None
+            if (
+                unit and unit["ativo"] and bool(unit["is_admin"]) == admin_only
+                and password_hash and check_password_hash(password_hash, request.form.get("senha") or "")
+            ):
                 session.clear()
                 session["unidade_id"] = unit["id"]
                 session.permanent = True
@@ -163,32 +197,73 @@ def login_page(admin_only):
                 # Somente rotas locais conhecidas podem ser destino do login.
                 if admin_only:
                     return redirect(url_for("web.admin"))
+                if unit_admin:
+                    session["admin_versao"] = unit["admin_versao"]
+                    return redirect(url_for("auth.change_password" if unit["admin_temporaria"] else "auth.unit_admin"))
                 allowed = {"/", "/chamar", "/painel", "/painel/compacto", "/gerar", "/senhas", "/historico"}
-                return redirect(target if target.split("?", 1)[0] in allowed else url_for("web.admin" if unit["is_admin"] else "web.chamar"))
+                return redirect(target if target.split("?", 1)[0] in allowed else url_for("web.chamar"))
             flash("Login ou senha incorretos.", "warning")
     unidades = []
     if not admin_only:
         with accounts() as conn:
             unidades = [dict(row) for row in conn.execute(
-                "SELECT nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome COLLATE NOCASE"
+                "SELECT nome, login, admin_senha_hash IS NOT NULL AS tem_admin FROM unidade_login WHERE is_admin = 0 AND ativo = 1 ORDER BY nome COLLATE NOCASE"
             )]
-    return render_template("login.html", admin_only=admin_only, unidades=unidades, form_token=form_token())
+    if unit_admin:
+        unidades = [unit for unit in unidades if unit["tem_admin"]]
+    return render_template("login.html", admin_only=admin_only, unit_admin=unit_admin, unidades=unidades, form_token=form_token())
+
+
+@bp.route("/unidade/admin/senha", methods=["GET", "POST"])
+def change_password():
+    if request.method == "POST":
+        password = request.form.get("nova_senha", "")
+        current = request.form.get("senha", "")
+        if not valid_form():
+            flash("Atualize a página e tente novamente.", "warning")
+        elif not check_password_hash(g.unidade["admin_senha_hash"], current):
+            flash("Senha atual incorreta.", "warning")
+        elif not 12 <= len(password) <= 128 or password == current or password != request.form.get("confirmacao"):
+            flash("Escolha uma senha diferente da atual, com 12 a 128 caracteres, e confirme-a.", "warning")
+        else:
+            with accounts() as conn:
+                updated = conn.execute("""
+                    UPDATE unidade_login SET admin_senha_hash = ?, admin_temporaria = 0, admin_versao = admin_versao + 1
+                    WHERE id = ? AND admin_versao = ? AND ativo = 1
+                """, (generate_password_hash(password), g.unidade["id"], session["admin_versao"])).rowcount
+            if not updated:
+                session.clear()
+                return redirect(url_for("auth.unit_admin_login"), code=303)
+            session["admin_versao"] += 1
+            return redirect(url_for("auth.unit_admin"), code=303)
+    return render_template("trocar_senha.html")
+
+
+@bp.route("/unidade/admin", methods=["GET", "POST"])
+def unit_admin():
+    return admin_page()
 
 
 def admin_page():
     unidade_painel = request.args.get("unidade_painel", type=int)
+    super_admin = bool(g.unidade["is_admin"])
+    admin_endpoint = "web.admin" if super_admin else "auth.unit_admin"
+    if not super_admin:
+        if "unidade_painel" in request.args and unidade_painel != g.unidade["id"]:
+            abort(404)
+        unidade_painel = g.unidade["id"]
     aba = request.args.get("aba")
     if aba not in {"logo", "link", "tempo", "senhas"}:
         aba = None
     with accounts() as conn:
-        if "unidade_painel" in request.args:
+        if unidade_painel is not None or "unidade_painel" in request.args:
             unidade = conn.execute(
                 "SELECT id, legacy FROM unidade_login WHERE id = ? AND is_admin = 0", (unidade_painel,)
             ).fetchone()
             if unidade is None:
                 abort(404)
         if request.method == "POST" and unidade_painel is not None:
-            destino = url_for("web.admin", unidade_painel=unidade_painel, aba=aba, _anchor=f"unidade-{unidade_painel}")
+            destino = url_for(admin_endpoint, unidade_painel=unidade_painel, aba=aba, _anchor=f"unidade-{unidade_painel}")
             if aba == "logo":
                 request.max_content_length = painel_logo.MAX_ARQUIVO + 64 * 1024
             try:
@@ -284,36 +359,19 @@ def admin_page():
             return redirect(destino)
 
     if request.method == "POST":
-        nome = (request.form.get("nome") or "").strip()
-        username = nome.lower()
-        password = request.form.get("senha") or ""
+        if not super_admin:
+            abort(403)
         if not valid_form():
-            flash("Atualize a pagina e tente novamente.", "warning")
-        elif not 3 <= len(nome) <= 100 or not password:
-            flash("Informe um nome de unidade de 3 a 100 caracteres e uma senha.", "warning")
+            flash("Atualize a página e tente novamente.", "warning")
         else:
-            try:
-                with accounts() as conn:
-                    conn.execute("BEGIN IMMEDIATE")
-                    first = conn.execute("SELECT 1 FROM unidade_login WHERE is_admin = 0 LIMIT 1").fetchone() is None
-                    cursor = conn.execute(
-                        "INSERT INTO unidade_login (nome, login, senha_hash, legacy) VALUES (?, ?, ?, ?)",
-                        (nome, username, generate_password_hash(password), int(first)),
-                    )
-                    unit = conn.execute("SELECT * FROM unidade_login WHERE id = ?", (cursor.lastrowid,)).fetchone()
-                administrator = dict(g.unidade)
-                try:
-                    select_unit(unit)
-                    db.init_db()
-                    db.salvar_unidade_padrao(nome)
-                finally:
-                    select_unit(administrator)
-                flash("Unidade cadastrada com sucesso.", "success")
-                return redirect(url_for("web.admin"))
-            except sqlite3.IntegrityError:
-                flash("Este login ja esta em uso. Escolha outro.", "warning")
+            credencial = manage_unit()
+            if credencial:
+                return render_template("credencial_unidade.html", **credencial)
     with accounts() as conn:
-        unidades = [dict(row) for row in conn.execute("SELECT id, nome, login FROM unidade_login WHERE is_admin = 0 ORDER BY nome")]
+        unidades = [dict(row) for row in conn.execute("""
+            SELECT id, nome, login, ativo, admin_senha_hash IS NOT NULL AS tem_admin
+            FROM unidade_login WHERE is_admin = 0 AND (? OR id = ?) ORDER BY nome
+        """, (super_admin, g.unidade["id"]))]
         cores = painel_cores.ler_cores(conn, unidade_painel) if unidade_painel is not None and aba != "senhas" else {}
     atendimentos = []
     if aba == "senhas" and unidade_painel is not None:
@@ -325,7 +383,66 @@ def admin_page():
                            logo=obter_logo_painel(unidade_painel) if aba == "logo" else None,
                            link_youtube=obter_link_painel(unidade_painel) if aba == "link" else "",
                            local_tempo=obter_local_tempo(unidade_painel) if aba == "tempo" else None,
-                           estados=painel_tempo.ESTADOS)
+                           estados=painel_tempo.ESTADOS, super_admin=super_admin, admin_endpoint=admin_endpoint)
+
+
+def manage_unit():
+    action = request.form.get("acao", "cadastrar_unidade")
+    if action == "cadastrar_unidade":
+        nome = request.form.get("nome", "").strip()
+        if not 3 <= len(nome) <= 100:
+            flash("Informe um nome de estabelecimento de 3 a 100 caracteres.", "warning")
+            return None
+        login = nome.lower()
+        senha = secrets.token_urlsafe(18)
+        operational_hash = generate_password_hash(request.form.get("senha") or secrets.token_urlsafe(32))
+        admin_hash = generate_password_hash(senha)
+        try:
+            with accounts() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                first = conn.execute("SELECT 1 FROM unidade_login WHERE is_admin = 0 LIMIT 1").fetchone() is None
+                cursor = conn.execute("""
+                    INSERT INTO unidade_login (nome, login, senha_hash, legacy, admin_senha_hash, admin_temporaria)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                """, (nome, login, operational_hash, int(first), admin_hash))
+                if first:
+                    db._salvar_configuracao(conn, "unidade_padrao", nome)
+                else:
+                    original_path = g.db_path
+                    g.db_path = unit_path({"id": cursor.lastrowid, "legacy": False})
+                    try:
+                        db.init_db()
+                    finally:
+                        g.db_path = original_path
+        except sqlite3.IntegrityError:
+            flash("Este login já está em uso. Escolha outro.", "warning")
+            return None
+        return {"login": login, "senha": senha}
+
+    if action not in {"gerar_senha_admin", "ativar_unidade", "desativar_unidade"}:
+        abort(400)
+    unit_id = request.form.get("unidade_id", type=int)
+    with accounts() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        unit = conn.execute(
+            "SELECT login FROM unidade_login WHERE id = ? AND is_admin = 0",
+            (unit_id,),
+        ).fetchone()
+        if unit is None:
+            abort(404)
+        if action == "gerar_senha_admin":
+            senha = secrets.token_urlsafe(18)
+            conn.execute("""
+                UPDATE unidade_login SET admin_senha_hash = ?, admin_temporaria = 1, admin_versao = admin_versao + 1
+                WHERE id = ?
+            """, (generate_password_hash(senha), unit_id))
+            return {"login": unit["login"], "senha": senha}
+        conn.execute(
+            "UPDATE unidade_login SET ativo = ?, admin_versao = admin_versao + 1 WHERE id = ?",
+            (int(action == "ativar_unidade"), unit_id),
+        )
+    flash("Acesso do estabelecimento atualizado.", "success")
+    return None
 
 
 def obter_local_tempo(unidade_id):
@@ -378,7 +495,7 @@ def logout():
         return "Formulario expirado. Atualize a pagina.", 400
     admin_only = bool(g.unidade["is_admin"])
     session.clear()
-    return redirect(url_for("auth.admin_login" if admin_only else "auth.login"))
+    return redirect(url_for("auth.admin_login" if admin_only else "auth.unit_admin_login" if g.unit_admin else "auth.login"))
 
 
 @bp.app_context_processor

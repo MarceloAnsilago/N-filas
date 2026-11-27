@@ -1,6 +1,8 @@
+from contextlib import closing
 from io import BytesIO
 from pathlib import Path
 import re
+import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 from PIL import Image
@@ -29,7 +31,7 @@ class MultiUnidadeTests(unittest.TestCase):
 
     def register(self, client, name, login):
         result = self.administrator.post("/admin", data={"nome": name, "senha": "senha-teste", "form_token": self.token(self.administrator, "/admin")})
-        if result.status_code == 302:
+        if b'id="senha-temporaria"' in result.data:
             client.post("/login", data={"login": name, "senha": "senha-teste", "form_token": self.token(client, "/login")})
         return result
 
@@ -73,7 +75,7 @@ class MultiUnidadeTests(unittest.TestCase):
         for index, password in enumerate(("1", "x" * 250)):
             name = f"Unidade {index}"
             response = self.administrator.post("/admin", data={"nome": name, "senha": password, "form_token": self.token(self.administrator, "/admin")})
-            self.assertEqual(response.status_code, 302)
+            self.assertIn(b'id="senha-temporaria"', response.data)
             client = self.app.test_client()
             response = client.post("/login", data={"login": name, "senha": password, "form_token": self.token(client, "/login")})
             self.assertEqual(response.location, "/chamar")
@@ -106,6 +108,94 @@ class MultiUnidadeTests(unittest.TestCase):
         page = self.administrator.get("/admin").get_data(as_text=True)
         self.assertIn("Unidade real", page)
         self.assertNotIn('href="/admin"', self.a.get("/chamar").get_data(as_text=True))
+
+    def test_unit_admin_requires_password_change_and_is_scoped_to_own_unit(self):
+        response = self.register(self.a, "Cartório Central", "cartório central")
+        temporary_password = re.search(r'id="senha-temporaria">([^<]+)', response.get_data(as_text=True)).group(1)
+        self.register(self.b, "Escola Municipal", "escola municipal")
+        route = "/unidade/admin/login"
+        unit_admin = self.app.test_client()
+        response = unit_admin.post(route, data={
+            "login": "cartório central", "senha": temporary_password,
+            "form_token": self.token(unit_admin, route),
+        })
+        self.assertEqual(response.location, "/unidade/admin/senha")
+        self.assertEqual(unit_admin.post("/chamar", data={"acao": "chamar"}).location, "/unidade/admin/senha")
+        self.assertEqual(self.a.get("/unidade/admin").location, route)
+        change = "/unidade/admin/senha"
+        new_password = "minha-senha-nova"
+        response = unit_admin.post(change, data={
+            "senha": temporary_password, "nova_senha": new_password, "confirmacao": new_password,
+            "form_token": self.token(unit_admin, change),
+        })
+        self.assertEqual(response.location, "/unidade/admin")
+        panel = unit_admin.get("/unidade/admin?aba=senhas")
+        self.assertIn("Cartório Central", panel.get_data(as_text=True))
+        self.assertNotIn("Escola Municipal", panel.get_data(as_text=True))
+        self.assertEqual(unit_admin.get("/chamar").status_code, 200)
+        self.assertEqual(unit_admin.get("/admin").location, "/admin/login")
+        self.assertEqual(unit_admin.get("/unidade/admin?unidade_painel=3").status_code, 404)
+        self.assertEqual(unit_admin.post("/unidade/admin?unidade_painel=3&aba=senhas", data={
+            "acao": "cadastrar_atendimento", "nome_atendimento": "Invasão",
+            "form_token": self.token(unit_admin, "/unidade/admin"),
+        }).status_code, 404)
+        local = "/unidade/admin?aba=senhas"
+        response = unit_admin.post(local, data={
+            "acao": "cadastrar_atendimento", "nome_atendimento": "Recepção",
+            "form_token": self.token(unit_admin, local),
+        }, follow_redirects=True)
+        self.assertIn("Recepção", response.get_data(as_text=True))
+        self.assertIn("Recepção", self.a.get("/senhas").get_data(as_text=True))
+        self.assertNotIn("Recepção", self.b.get("/senhas").get_data(as_text=True))
+
+        stream = unit_admin.get("/painel/events", buffered=False)
+        self.addCleanup(stream.close)
+        events = iter(stream.response)
+        self.assertIn(b"event: status", next(events))
+        response = self.administrator.post("/admin", data={
+            "acao": "gerar_senha_admin", "unidade_id": 2,
+            "form_token": self.token(self.administrator, "/admin"),
+        })
+        self.assertIn(b'id="senha-temporaria"', response.data)
+        self.assertEqual(unit_admin.get("/unidade/admin").location, route)
+        self.assertEqual(self.a.get("/chamar").status_code, 200)
+        self.assertTrue(self.a.post("/senhas/emitir/1").get_json()["ok"])
+        with self.assertRaises(StopIteration):
+            next(events)
+        self.administrator.post("/admin", data={
+            "acao": "desativar_unidade", "unidade_id": 2,
+            "form_token": self.token(self.administrator, "/admin"),
+        })
+        self.assertEqual(self.a.get("/painel/status").status_code, 401)
+
+    def test_migration_keeps_original_admin_and_operational_hashes(self):
+        path = str(Path(self.directory.name) / "legacy.db")
+        admin_hash = generate_password_hash("admin-antigo")
+        unit_hash = generate_password_hash("operacao-antiga")
+        with closing(sqlite3.connect(path)) as conn, conn:
+            conn.execute("""
+                CREATE TABLE unidade_login (
+                    id INTEGER PRIMARY KEY, nome TEXT NOT NULL, login TEXT NOT NULL UNIQUE,
+                    senha_hash TEXT NOT NULL, legacy INTEGER NOT NULL DEFAULT 0,
+                    is_admin INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            conn.executemany("INSERT INTO unidade_login VALUES (?, ?, ?, ?, ?, ?)", [
+                (1, "Administrador", "admin", admin_hash, 0, 1),
+                (2, "Unidade antiga", "unidade antiga", unit_hash, 1, 0),
+            ])
+        app = create_app({"TESTING": True, "SECRET_KEY": "test-secret", "DB_PATH": path})
+        with app.app_context(), accounts() as conn:
+            rows = conn.execute("SELECT senha_hash, admin_senha_hash FROM unidade_login ORDER BY id").fetchall()
+            self.assertEqual([tuple(row) for row in rows], [(admin_hash, None), (unit_hash, None)])
+        for route, login, senha, destination in (
+            ("/admin/login", "admin", "admin-antigo", "/admin"),
+            ("/login", "unidade antiga", "operacao-antiga", "/chamar"),
+        ):
+            client = app.test_client()
+            self.assertEqual(client.post(route, data={
+                "login": login, "senha": senha, "form_token": self.token(client, route),
+            }).location, destination)
 
     def test_panel_colors_are_validated_and_saved_per_unit(self):
         self.register(self.a, "Unidade Norte", "norte")
@@ -170,7 +260,7 @@ class MultiUnidadeTests(unittest.TestCase):
             self.assertEqual(self.a.get(route).status_code, 302)
         self.assertEqual(self.a.get("/painel/status").status_code, 401)
         self.assertEqual(self.a.post("/gerar").status_code, 401)
-        self.assertEqual(self.register(self.a, "São Miguel", "saomiguel").status_code, 302)
+        self.assertIn(b'id="senha-temporaria"', self.register(self.a, "São Miguel", "saomiguel").data)
         with self.app.app_context(), accounts() as conn:
             row = conn.execute("SELECT * FROM unidade_login WHERE is_admin = 0").fetchone()
             self.assertNotEqual(row["senha_hash"], "senha-teste")
@@ -263,7 +353,7 @@ class MultiUnidadeTests(unittest.TestCase):
         self.register(self.b, "Santana", "santana")
         self.assertEqual(self.b.get("/painel/status").get_json()["proximas_senhas"], [])
         anonymous = self.app.test_client()
-        self.assertIn("ja esta em uso", self.register(anonymous, "SÃO MIGUEL", "saomiguel").get_data(as_text=True))
+        self.assertIn("já está em uso", self.register(anonymous, "SÃO MIGUEL", "saomiguel").get_data(as_text=True))
         with self.app.app_context(), accounts() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM unidade_login").fetchone()[0], 3)
 

@@ -29,11 +29,13 @@ O SQLite (`ultima_senha.db`) e criado automaticamente quando o aplicativo inicia
 
 ### Login por unidade
 
-- Entre como administrador em `/admin/login` e cadastre nome e senha das unidades (o nome tambem e o login) em `/admin`. O cadastro publico foi removido. Cada unidade usa um login compartilhado, inclusive nos computadores de atendimento e na TV do painel.
+- Entre no Super Admin em `/admin/login` com a conta administrativa já configurada. Em `/admin`, cadastre o estabelecimento e copie a senha administrativa temporária exibida na confirmação. O nome do estabelecimento será o login.
+- O responsável entra em `/unidade/admin/login`, troca a senha temporária e acessa as configurações do próprio estabelecimento. Para uma unidade já cadastrada, use **Gerar senha administrativa** no Super Admin.
+- O login operacional em `/login` continua disponível para balcão e TV. As senhas operacionais existentes são preservadas. Para novas unidades que precisam desse acesso, preencha a senha de balcão e TV no cadastro.
 - **Cadastre primeiro a unidade que ja utiliza o sistema.** A primeira conta recebe o banco existente, com suas filas e historico. As demais comecam com bancos vazios.
 - Todas as telas exigem login. A fila, as chamadas, os contadores, o historico, as configuracoes e os eventos do painel ficam separados por unidade.
 - Use **Sair** para trocar de unidade. Abas do mesmo perfil do navegador compartilham o login; para usar duas unidades simultaneamente, utilize perfis separados.
-- `/admin` continua acessivel apenas pela URL e exige uma conta de administrador. O formulario cadastra unidades sem trocar a sessao do administrador.
+- `/admin` permite redefinir senhas administrativas e ativar ou desativar estabelecimentos. A redefinição encerra as sessões administrativas daquele estabelecimento.
 - O arquivo definido em `PAINEL_DB_PATH` guarda o cadastro de logins e os dados da primeira unidade. Os bancos adicionais ficam ao lado dele, na pasta `<nome_do_banco>_unidades`, identificados por ID. Inclua essa pasta no backup e no volume persistente do servidor.
 - As senhas sao armazenadas com hash. Defina uma `SECRET_KEY` secreta para as sessoes; sem uma chave personalizada, o app gera um arquivo `.session_secret` ao lado do banco, que tambem deve persistir entre reinicios.
 - Reinicie o servidor depois de instalar a atualizacao.

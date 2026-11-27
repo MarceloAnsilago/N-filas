@@ -126,7 +126,16 @@
           <i class="bx bx-chevron-left toggle-icon"></i>
         </button>
       </div>
+      {% if not unidade_conectada or (not unidade_conectada.is_admin and not (g.unit_admin and unidade_conectada.admin_temporaria)) %}
       <ul class="nav flex-column">
+        {% if g.unit_admin %}
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('auth.unit_admin') }}">
+            <i class="bx bx-cog"></i>
+            <span class="label">Administração</span>
+          </a>
+        </li>
+        {% endif %}
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'web.chamar' %}active{% endif %}" href="{{ url_for('web.chamar') }}">
             <i class="bx bxs-bell-ring"></i>
@@ -152,6 +161,7 @@
           </a>
         </li>
       </ul>
+      {% endif %}
     </nav>
     <main class="layout-main p-4 flex-grow-1" style="margin-left: 230px;">
       {% if unidade_conectada %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Trocar senha administrativa{% endblock %}
+{% block content %}
+<section class="card p-4" style="max-width: 36rem;">
+  <h1 class="h3">Trocar senha administrativa</h1>
+  {% if unidade_conectada.admin_temporaria %}
+  <p>Defina sua senha para continuar.</p>
+  {% endif %}
+  <form method="post">
+    <input type="hidden" name="form_token" value="{{ auth_form_token() }}">
+    <label class="form-label" for="senha">Senha atual</label>
+    <input class="form-control mb-3" id="senha" name="senha" type="password" required autocomplete="current-password">
+    <label class="form-label" for="nova_senha">Nova senha (12 a 128 caracteres)</label>
+    <input class="form-control mb-3" id="nova_senha" name="nova_senha" type="password" required minlength="12" maxlength="128" autocomplete="new-password">
+    <label class="form-label" for="confirmacao">Confirme a nova senha</label>
+    <input class="form-control mb-3" id="confirmacao" name="confirmacao" type="password" required minlength="12" maxlength="128" autocomplete="new-password">
+    <button class="btn btn-primary" type="submit">Salvar senha</button>
+    {% if not unidade_conectada.admin_temporaria %}
+    <a class="btn btn-link" href="{{ url_for('auth.unit_admin') }}">Voltar</a>
+    {% endif %}
+  </form>
+</section>
+{% endblock %}
