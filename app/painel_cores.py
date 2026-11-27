@@ -35,9 +35,9 @@ def ler_cores(conn, unidade_id):
     ).fetchall())
 
 
-def validar_cores(form):
+def validar_cores(form, itens=ITENS):
     cores = {}
-    for chave, _, padrao in ITENS:
+    for chave, _, padrao in itens:
         cor = form.get(chave, "").lower()
         if re.fullmatch(r"#[0-9a-f]{6}", cor) is None:
             return None

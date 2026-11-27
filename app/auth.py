@@ -211,6 +211,15 @@ def admin_page():
                             request.form.get("atendimento_id", type=int), acao == "ativar_atendimento"
                         )
                         flash("Atendimentos do totem atualizados.", "success")
+                    elif acao in {"salvar_cores_botao", "restaurar_cores_botao"}:
+                        atendimento_id = request.form.get("atendimento_id", type=int)
+                        cores_botao = {} if acao == "restaurar_cores_botao" else painel_cores.validar_cores(
+                            request.form, db.CORES_BOTAO_ATENDIMENTO
+                        )
+                        if cores_botao is None:
+                            raise ValueError("Informe uma cor válida para cada item.")
+                        db.salvar_cores_botao_atendimento(atendimento_id, cores_botao)
+                        flash("Cores do botão atualizadas.", "success")
                     else:
                         abort(400)
                 except ValueError as erro:
@@ -312,7 +321,7 @@ def admin_page():
         atendimentos = db.listar_atendimentos_totem()
     return render_template("admin.html", unidades=unidades, unidade_painel=unidade_painel, aba=aba,
                            itens_painel=painel_cores.ITENS, cores=cores, form_token=form_token(),
-                           atendimentos=atendimentos,
+                           atendimentos=atendimentos, itens_botao=db.CORES_BOTAO_ATENDIMENTO,
                            logo=obter_logo_painel(unidade_painel) if aba == "logo" else None,
                            link_youtube=obter_link_painel(unidade_painel) if aba == "link" else "",
                            local_tempo=obter_local_tempo(unidade_painel) if aba == "tempo" else None,

@@ -236,6 +236,25 @@ class MultiUnidadeTests(unittest.TestCase):
         self.configurar_atendimento(2, "ativar_atendimento", atendimento_id=1)
         self.assertEqual(self.a.post("/senhas/emitir/1").get_json()["senha"], "002")
 
+    def test_service_button_colors_are_saved_and_restored_per_unit(self):
+        self.register(self.a, "Unidade A", "a")
+        self.register(self.b, "Unidade B", "b")
+        self.configurar_atendimento(2, nome_atendimento="Recepção")
+        self.configurar_atendimento(3, nome_atendimento="Recepção")
+        cores = {chave: padrao for chave, _, padrao in db.CORES_BOTAO_ATENDIMENTO}
+        cores["icone"] = "#ff9900"
+        cores["fundo-rodape"] = "#123456"
+        cadastro = self.configurar_atendimento(2, "salvar_cores_botao", atendimento_id=1, **cores)
+        self.assertIn("--botao-icone: #ff9900;", cadastro.get_data(as_text=True))
+        self.assertIn("--botao-fundo-rodape: #123456;", self.a.get("/senhas").get_data(as_text=True))
+        self.assertNotIn("--botao-icone:", self.b.get("/senhas").get_data(as_text=True))
+        cores["icone"] = "red"
+        invalido = self.configurar_atendimento(2, "salvar_cores_botao", atendimento_id=1, **cores)
+        self.assertIn("Informe uma cor válida", invalido.get_data(as_text=True))
+        self.assertIn("--botao-icone: #ff9900;", self.a.get("/senhas").get_data(as_text=True))
+        self.configurar_atendimento(2, "restaurar_cores_botao", atendimento_id=1)
+        self.assertNotIn("--botao-icone:", self.a.get("/senhas").get_data(as_text=True))
+
     def test_first_unit_keeps_existing_data_and_duplicate_registration_preserves_it(self):
         with self.app.app_context():
             db.inserir_senha(45, "Unidade antiga")

@@ -1,4 +1,4 @@
-<button type="button" class="ticket-button"{% if previa %} disabled{% else %} data-issue-url="{{ url_for('web.emitir_senha', atendimento_id=atendimento.id) }}"{% endif %}>
+<button type="button" class="ticket-button"{% if previa %} disabled{% else %} data-issue-url="{{ url_for('web.emitir_senha', atendimento_id=atendimento.id) }}"{% endif %}{% if atendimento.cores %} style="{% for chave, cor in atendimento.cores.items() %}--botao-{{ chave }}: {{ cor }};{% endfor %}"{% endif %}>
   <span class="ticket-button-body">
     <span class="ticket-button-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24">

@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -19,6 +20,16 @@ COLUNAS = (
     "prioridade",
     "origem",
     "atualizado_em",
+)
+CORES_BOTAO_ATENDIMENTO = (
+    ("fundo-inicio", "Início do fundo", "#1d4ed8"),
+    ("fundo-fim", "Fim do fundo", "#172e75"),
+    ("borda", "Borda do botão", "#608dff"),
+    ("titulo", "Nome do atendimento", "#ffffff"),
+    ("icone", "Ícone do atendimento", "#ffffff"),
+    ("fundo-icone", "Fundo do ícone", "#3255a9"),
+    ("fundo-rodape", "Fundo da faixa inferior", "#2d478b"),
+    ("texto-rodape", "Texto e seta da faixa inferior", "#ffffff"),
 )
 
 @contextmanager
@@ -402,8 +413,15 @@ def _criar_tabela_atendimentos(conn):
 def listar_atendimentos_totem(*, somente_ativos=False):
     with conectar() as conn:
         _criar_tabela_atendimentos(conn)
-        filtro = " WHERE ativo = 1" if somente_ativos else ""
-        return conn.execute("SELECT id, nome, ativo FROM atendimento_totem" + filtro + " ORDER BY id").fetchall()
+        filtro = "WHERE atendimento.ativo = 1" if somente_ativos else ""
+        rows = conn.execute(f"""
+            SELECT atendimento.id, atendimento.nome, atendimento.ativo, configuracao.valor AS cores
+            FROM atendimento_totem AS atendimento
+            LEFT JOIN configuracao ON configuracao.chave = 'cores_botao_atendimento_' || atendimento.id
+            {filtro}
+            ORDER BY atendimento.id
+        """).fetchall()
+        return [dict(row, cores=json.loads(row["cores"]) if row["cores"] else {}) for row in rows]
 
 
 def cadastrar_atendimento_totem(nome):
@@ -425,6 +443,19 @@ def definir_atendimento_totem_ativo(atendimento_id, ativo):
         _criar_tabela_atendimentos(conn)
         atualizado = conn.execute("UPDATE atendimento_totem SET ativo = ? WHERE id = ?", (ativo, atendimento_id))
         if not atualizado.rowcount:
+            raise ValueError("Atendimento não encontrado.")
+
+
+def salvar_cores_botao_atendimento(atendimento_id, cores):
+    with conectar() as conn:
+        _criar_tabela_atendimentos(conn)
+        salvo = conn.execute("""
+            INSERT INTO configuracao (chave, valor)
+            SELECT 'cores_botao_atendimento_' || id, ?
+            FROM atendimento_totem WHERE id = ?
+            ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor
+        """, (json.dumps(cores), atendimento_id))
+        if not salvo.rowcount:
             raise ValueError("Atendimento não encontrado.")
 
 

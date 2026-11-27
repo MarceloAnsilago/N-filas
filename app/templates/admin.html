@@ -6,6 +6,7 @@
   <title>Administração | Gfilas</title>
   {% if aba == 'senhas' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/botao-atendimento.css') }}">
+  <script src="{{ url_for('static', filename='js/admin-botao-atendimento.js') }}" defer></script>
   {% endif %}
   <style>
     * { box-sizing: border-box; }
@@ -51,8 +52,13 @@
     h2 { margin: 0 0 10px; font-size: 1.15rem; }
     .card p { margin: 0; color: #526078; line-height: 1.6; }
     .open { display: inline-block; margin-top: 20px; color: #2563eb; font-weight: 600; }
-    .service-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 24px; list-style: none; padding: 0; }
+    .service-list { display: grid; gap: 24px; list-style: none; padding: 0; }
+    .service-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding-top: 24px; border-top: 1px solid #dce3ef; }
+    .service-colors { min-width: 0; }
+    .service-colors fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    .service-colors legend { padding: 0; font-weight: 600; }
     .service-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+    @media (max-width: 700px) { .service-editor { grid-template-columns: 1fr; gap: 12px; } }
   </style>
 </head>
 <body>
@@ -118,21 +124,39 @@
             <button class="primary" type="submit" name="acao" value="cadastrar_atendimento">Adicionar atendimento</button>
           </form>
           {% if atendimentos %}
-          <ul class="service-list" aria-label="Prévia dos botões do totem">
+          <ul class="service-list" aria-label="Personalização dos botões do totem">
             {% for atendimento in atendimentos %}
-            <li>
-              {% with previa = true %}
-              {% include "_botao_atendimento.html" %}
-              {% endwith %}
-              <div class="service-controls">
-                <span>{{ 'Ativo' if atendimento.ativo else 'Inativo' }}</span>
-                <form method="post" action="{{ url_atendimentos }}">
-                  <input type="hidden" name="form_token" value="{{ form_token }}">
-                  <input type="hidden" name="atendimento_id" value="{{ atendimento.id }}">
-                  <button type="submit" name="acao" value="{{ 'desativar_atendimento' if atendimento.ativo else 'ativar_atendimento' }}"
-                          aria-label="{{ 'Desativar' if atendimento.ativo else 'Ativar' }} {{ atendimento.nome }}">{{ 'Desativar' if atendimento.ativo else 'Ativar' }}</button>
-                </form>
+            <li class="service-editor" id="atendimento-{{ atendimento.id }}">
+              <div>
+                {% with previa = true %}
+                {% include "_botao_atendimento.html" %}
+                {% endwith %}
+                <div class="service-controls">
+                  <span>{{ 'Ativo' if atendimento.ativo else 'Inativo' }}</span>
+                  <form method="post" action="{{ url_atendimentos }}">
+                    <input type="hidden" name="form_token" value="{{ form_token }}">
+                    <input type="hidden" name="atendimento_id" value="{{ atendimento.id }}">
+                    <button type="submit" name="acao" value="{{ 'desativar_atendimento' if atendimento.ativo else 'ativar_atendimento' }}"
+                            aria-label="{{ 'Desativar' if atendimento.ativo else 'Ativar' }} {{ atendimento.nome }}">{{ 'Desativar' if atendimento.ativo else 'Ativar' }}</button>
+                  </form>
+                </div>
               </div>
+              <form class="service-colors" method="post" action="{{ url_atendimentos }}">
+                <input type="hidden" name="form_token" value="{{ form_token }}">
+                <input type="hidden" name="atendimento_id" value="{{ atendimento.id }}">
+                <fieldset aria-label="Cores do botão de {{ atendimento.nome }}">
+                  <legend>Cores do botão</legend>
+                  <div class="color-grid">
+                    {% for chave, rotulo, padrao in itens_botao %}
+                    <label><input type="color" name="{{ chave }}" value="{{ atendimento.cores.get(chave, padrao) }}" data-default-color="{{ padrao }}"> {{ rotulo }}</label>
+                    {% endfor %}
+                  </div>
+                </fieldset>
+                <div class="color-actions">
+                  <button type="submit" class="primary" name="acao" value="salvar_cores_botao">Salvar cores</button>
+                  <button type="submit" name="acao" value="restaurar_cores_botao">Restaurar cores padrão</button>
+                </div>
+              </form>
             </li>
             {% endfor %}
           </ul>

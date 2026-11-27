@@ -7,10 +7,10 @@
   min-height: clamp(320px, 43vh, 540px);
   padding: 0;
   overflow: hidden;
-  border: 1px solid #608dff;
+  border: 1px solid var(--botao-borda, #608dff);
   border-radius: 22px;
-  background: linear-gradient(135deg, #1d4ed8, #172e75);
-  color: #fff;
+  background: linear-gradient(135deg, var(--botao-fundo-inicio, #1d4ed8), var(--botao-fundo-fim, #172e75));
+  color: var(--botao-titulo, #fff);
   font: 400 1rem "Segoe UI", sans-serif;
   text-align: left;
   cursor: pointer;
@@ -22,10 +22,10 @@
 .ticket-button:disabled { cursor: default; }
 .ticket-button svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .ticket-button-body { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 24px; padding: clamp(28px, 4vw, 56px); }
-.ticket-button-icon { box-sizing: border-box; width: 100px; height: 100px; display: grid; place-items: center; border: 1px solid #ffffff40; border-radius: 26px; background: #ffffff18; }
+.ticket-button-icon { box-sizing: border-box; width: 100px; height: 100px; display: grid; place-items: center; border: 1px solid #ffffff40; border-radius: 26px; background: var(--botao-fundo-icone, #ffffff18); color: var(--botao-icone, #fff); }
 .ticket-button-icon svg { width: 64px; height: 64px; }
 .ticket-button-title { font-size: clamp(2rem, 3.4vw, 3.2rem); font-weight: 700; letter-spacing: -.03em; line-height: 1.2; overflow-wrap: anywhere; min-width: 0; }
-.ticket-button-footer { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 76px; padding: 22px 32px; background: #ffffff18; font-size: 1.1rem; font-weight: 700; }
+.ticket-button-footer { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 76px; padding: 22px 32px; background: var(--botao-fundo-rodape, #ffffff18); color: var(--botao-texto-rodape, #fff); font-size: 1.1rem; font-weight: 700; }
 .ticket-button-footer svg { width: 20px; height: 20px; transition: transform .18s ease; }
 .ticket-button:enabled:active { transform: scale(.985); }
 
